@@ -68,6 +68,17 @@ pub const nft_policy: PolicyId =
 /// The name of that NFT.
 pub const nft_name: ByteArray = "gero_nft"
 
+// ## Validator parameters
+
+/// The v1 fee in basis points of the price.
+pub const v1_fee_bps: Int = 100
+
+/// The v1 minimum fee: 1.5 ADA.
+pub const v1_min_fee: Int = 1_500_000
+
+/// The v1 fee cap: 5 ADA.
+pub const v1_max_fee: Option<Int> = Some(5_000_000)
+
 // ## Addresses
 
 /// The seller's address: their payment key plus their stake key.

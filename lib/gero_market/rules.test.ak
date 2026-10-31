@@ -10,7 +10,8 @@ use cardano/transaction.{DatumHash, InlineDatum, Input, NoDatum, Output}
 use gero_market/fixtures.{
   ada_out, creator, creator_b, fee_addr, fee_addr_other_stake, hash_datum_input,
   listing, listing_input, nft_name, nft_policy, other_script_hash, out_ref,
-  script_hash, seller, seller_other_stake, tagged_out,
+  script_hash, seller, seller_other_stake, tagged_out, v1_fee_bps, v1_max_fee,
+  v1_min_fee,
 }
 use gero_market/rules.{
   lovelace_paid_to, own_output, pays, pays_each, total_fees,
@@ -24,7 +25,7 @@ fn tag() -> ByteArray {
 }
 
 fn v1_total_fees(inputs: List<Input>) -> Int {
-  total_fees(inputs, script_hash, 100, 1_500_000, Some(5_000_000))
+  total_fees(inputs, script_hash, v1_fee_bps, v1_min_fee, v1_max_fee)
 }
 
 // ## pays
