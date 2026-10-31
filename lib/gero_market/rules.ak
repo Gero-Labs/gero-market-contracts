@@ -52,6 +52,7 @@ pub fn pays_each(
             royalty.lovelace > 0,
             // mutant:royalty-paid
             pays(out, royalty.address, royalty.lovelace, tag),
+            // mutant:royalty-rest
             pays_each(others, rest, tag),
           }
       }
