@@ -1,0 +1,14 @@
+{
+  "preamble": {
+    "title": "gero-labs/gero-market-contracts",
+    "description": "Gero listing contract: NFT marketplace listing validator for Cardano",
+    "version": "0.0.0",
+    "plutusVersion": "v3",
+    "compiler": {
+      "name": "Aiken",
+      "version": "v1.1.24+bacbeb3"
+    },
+    "license": "Apache-2.0"
+  },
+  "validators": []
+}

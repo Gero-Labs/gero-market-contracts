@@ -1,0 +1,16 @@
+# Aiken compilation artifacts
+artifacts/
+# Aiken's project working directory
+build/
+
+# JavaScript tooling
+node_modules/
+
+# Keys and secrets never belong in this repo (preprod keys live in ~/.gero-market-keys/)
+*.skey
+*.vkey
+keys/
+.env*
+
+# macOS
+.DS_Store

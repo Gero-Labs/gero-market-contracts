@@ -1,0 +1,12 @@
+{
+  "name": "gero-market-contracts",
+  "version": "0.0.0",
+  "description": "Gero listing contract: build, test and deployment tooling",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "test": "node --test \"scripts/*.test.mjs\"",
+    "check": "aiken fmt --check && aiken check && aiken build"
+  }
+}
