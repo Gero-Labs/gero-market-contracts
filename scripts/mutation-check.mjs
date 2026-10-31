@@ -12,19 +12,23 @@
 // the repository root) this script
 //   1. replaces the expression of the clause, the next line that is not a comment, with `True`
 //      (the indentation, an optional `Pattern -> ` arm prefix and an optional trailing comma stay);
-//   2. runs `aiken check --skip-tests`. If that fails, the mutant did not compile: status
+//   2. runs `aiken check --skip-tests`. If that exits 1, the mutant did not compile: status
 //      `compile-error` (a typo must never look like a mutant a test killed);
-//   3. runs `aiken check`. If that fails, a test noticed the change: status `killed`. If it
-//      passes, no test depends on the clause: status `survived`;
+//   3. runs `aiken check`. If that exits 1, a test noticed the change: status `killed`. If it
+//      exits 0, no test depends on the clause: status `survived`;
 //   4. puts the file back (also when interrupted by SIGINT, SIGTERM or SIGHUP).
 // Before the first mutant it runs `aiken check` on the untouched project: if that already fails,
 // every mutant would look killed, so the script stops.
 //
+// Any other way for either run to end (an exit status other than 0 or 1, such as a panic or an
+// out-of-memory kill, or death by a signal) is a tool failure, not a verdict: status `error`.
+// Only an exit status of exactly 1 with no signal counts as a failing test or a compile error.
+//
 // Prints a table `id | file:line | status` on stdout (`file:line` is the mutated clause) and
 // a summary line. Exit 0 only if there is at least one marker and every mutant is `killed`.
-// Exit 1 for a survivor, a `compile-error`, a failing baseline, a duplicate id, a marker that is
-// not followed by a single-line clause or a project without markers. A bad option, a missing
-// root or an `aiken` that cannot be started exits 2.
+// Exit 1 for a survivor, a `compile-error`, an `error`, a failing baseline, a duplicate id, a
+// marker that is not followed by a single-line clause or a project without markers. A bad option,
+// a missing root or an `aiken` that cannot be started exits 2.
 //
 // Only exit codes of `aiken` are used, never its output: a mutant leaves variables unused and
 // so always produces warnings. Property tests run with a fixed seed so that a run is reproducible.
@@ -208,7 +212,10 @@ function restoreActive() {
   }
 }
 
-/** Runs `aiken <args>` in `cwd`. Resolves `{ status, tail }`, or `{ launchError }` if it cannot start. */
+/**
+ * Runs `aiken <args>` in `cwd`. Resolves `{ status, signal, tail }` (`status` is null when a
+ * signal ended the process), or `{ launchError }` if it cannot start.
+ */
 function runAiken(aiken, args, cwd) {
   return new Promise((resolvePromise) => {
     let tail = '';
@@ -225,9 +232,28 @@ function runAiken(aiken, args, cwd) {
     });
     proc.on('close', (status, signal) => {
       child = null;
-      resolvePromise({ status: status ?? (signal ? 1 : 0), tail });
+      resolvePromise({ status, signal, tail });
     });
   });
+}
+
+/**
+ * The status of one mutant from the runs of aiken. `stage` is `compile` for
+ * `aiken check --skip-tests` and `tests` for `aiken check`. Only exit status 0 and exactly 1,
+ * with no signal, are verdicts: anything else is a tool failure and gives `error`.
+ * Returns `ok` when the compile stage passes, so the caller goes on to the tests.
+ */
+export function judge(stage, { status, signal }) {
+  const exited = signal === null || signal === undefined;
+  if (exited && status === 0) return stage === 'compile' ? 'ok' : 'survived';
+  if (exited && status === 1) return stage === 'compile' ? 'compile-error' : 'killed';
+  return 'error';
+}
+
+/** The stderr text for a mutant whose aiken run was a tool failure. */
+function failure(marker, run, result) {
+  const how = result.signal ? `was ended by ${result.signal}` : `exited with status ${result.status}`;
+  return `\n${marker.id} (${marker.file}:${marker.line}): ${run} ${how}, which says nothing about the tests:\n${result.tail}\n`;
 }
 
 function table(rows) {
@@ -298,13 +324,16 @@ async function main(argv) {
       writeFileSync(path, marker.mutatedText);
       const compiled = await runAiken(aiken, ['check', '-S', '--skip-tests'], root);
       if (compiled.launchError) throw compiled.launchError;
-      if (compiled.status !== 0) {
-        status = 'compile-error';
-        diagnostics += `\n${marker.id} (${marker.file}:${marker.line}) does not compile when replaced by True:\n${compiled.tail}\n`;
-      } else {
+      status = judge('compile', compiled);
+      if (status === 'ok') {
         const tested = await runAiken(aiken, check, root);
         if (tested.launchError) throw tested.launchError;
-        status = tested.status === 0 ? 'survived' : 'killed';
+        status = judge('tests', tested);
+        if (status === 'error') diagnostics += failure(marker, 'the tests run', tested);
+      } else if (status === 'compile-error') {
+        diagnostics += `\n${marker.id} (${marker.file}:${marker.line}) does not compile when replaced by True:\n${compiled.tail}\n`;
+      } else {
+        diagnostics += failure(marker, 'the compile run', compiled);
       }
     } finally {
       restoreActive();
@@ -318,7 +347,7 @@ async function main(argv) {
   const seconds = ((Date.now() - started) / 1000).toFixed(1);
   console.log(
     `\n${rows.length} mutants: ${count('killed')} killed, ${count('survived')} survived, ` +
-      `${count('compile-error')} compile-error (${seconds}s)`,
+      `${count('compile-error')} compile-error, ${count('error')} error (${seconds}s)`,
   );
   if (diagnostics) console.error(diagnostics);
   return rows.every((row) => row.status === 'killed') ? 0 : 1;

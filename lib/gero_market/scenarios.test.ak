@@ -293,8 +293,10 @@ test two_listings_cannot_share_one_seller_output() {
 }
 
 test two_listings_cannot_share_one_royalty_output() {
-  // Each listing owes the creator 2 ADA. One 4 ADA royalty output, tagged for listing 0 and
-  // placed after listing 0's seller output, is no royalty output of listing 1's.
+  // Both listings point at the same group: output 1 is the seller output and output 2 the
+  // royalty output. Each listing owes the creator 2 ADA and its seller 98.5 ADA (listing 0) or
+  // 99.5 ADA (listing 1); output 1 holds 198 ADA and output 2 holds 4 ADA, so by amount, address
+  // and fee (3 ADA) one group would pay both. Only the tags tell the two apart.
   let a = listing(100_000_000, royalty_of(creator, 2_000_000), None)
   let b = listing(100_000_000, royalty_of(creator, 2_000_000), None)
   let inputs = [
@@ -302,13 +304,33 @@ test two_listings_cannot_share_one_royalty_output() {
     listing_input(out_ref(0), a, deposit_a),
     listing_input(out_ref(1), b, deposit_b),
   ]
-  let outputs = [
-    fee_out(3_000_000),
-    tagged_out(seller, 98_500_000, out_ref(0)),
-    tagged_out(creator, 4_000_000, out_ref(0)),
-    tagged_out(seller, 99_500_000, out_ref(1)),
-  ]
-  verdicts(inputs, [bought(0, 1), bought(1, 3)], outputs, []) == [True, False]
+  let redeemers = [bought(0, 1), bought(1, 1)]
+  let shared = fn(seller_tag, royalty_tag) {
+    [
+      fee_out(3_000_000),
+      tagged_out(seller, 198_000_000, seller_tag),
+      tagged_out(creator, 4_000_000, royalty_tag),
+    ]
+  }
+  and {
+    // The seller output is listing 1's: listing 1 passes its seller check and is rejected only
+    // because the royalty output carries listing 0's tag. Listing 0 fails on the seller tag.
+    verdicts(inputs, redeemers, shared(out_ref(1), out_ref(0)), []) == [
+      False, False,
+    ],
+    // The mirror: the seller output is listing 0's, the royalty output listing 1's.
+    verdicts(inputs, redeemers, shared(out_ref(0), out_ref(1)), []) == [
+      False, False,
+    ],
+    // Giving the royalty output the tag of the listing that owns the seller output flips that
+    // listing to accepted, so in the two cases above the royalty tag alone decided its verdict.
+    verdicts(inputs, redeemers, shared(out_ref(1), out_ref(1)), []) == [
+      False, True,
+    ],
+    verdicts(inputs, redeemers, shared(out_ref(0), out_ref(0)), []) == [
+      True, False,
+    ],
+  }
 }
 
 test royalty_output_cannot_double_as_the_next_listings_seller_output() {

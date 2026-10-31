@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { findMarkers, parseClause } from './mutation-check.mjs';
+import { findMarkers, judge, parseClause } from './mutation-check.mjs';
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'mutation-check.mjs');
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -56,6 +56,25 @@ function fakeAiken(dir, fast) {
     path,
     `#!/bin/sh\nn=$(cat "${dir}/count" 2>/dev/null || echo 0)\necho $((n + 1)) > "${dir}/count"\n` +
       `if [ "$n" -ge ${fast} ]; then exec sleep 30; fi\nexit 0\n`,
+  );
+  chmodSync(path, 0o755);
+  return path;
+}
+
+/**
+ * A stand-in for aiken that ends its n-th run as `steps[n]` says: a number is an exit status,
+ * `'kill'` makes it die by SIGKILL. The runs of a one-marker project are, in order: the check of
+ * the untouched project, the compile run and the tests run of the mutant.
+ */
+function scriptedAiken(dir, steps) {
+  const path = join(dir, 'scripted-aiken.sh');
+  const cases = steps
+    .map((step, n) => `  ${n}) ${step === 'kill' ? 'kill -9 $$' : `exit ${step}`} ;;`)
+    .join('\n');
+  writeFileSync(
+    path,
+    `#!/bin/sh\nn=$(cat "${dir}/count" 2>/dev/null || echo 0)\necho $((n + 1)) > "${dir}/count"\n` +
+      `case $n in\n${cases}\n  *) exit 0 ;;\nesac\n`,
   );
   chmodSync(path, 0o755);
   return path;
@@ -252,6 +271,58 @@ test('puts the source back when interrupted while a mutant is being judged', asy
   const { code } = await closed;
   assert.equal(code, 130);
   assert.equal(readFileSync(file, 'utf8'), RULES, 'the source is put back');
+});
+
+// ## A tool failure is not a verdict (Ruling R15)
+
+const ONE_CLAUSE = 'pub fn m(a: Bool) -> Bool {\n  // mutant:only\n  a\n}\n';
+
+function judged(steps) {
+  const dir = folder({ 'lib/m.ak': ONE_CLAUSE });
+  const result = run(dir, { AIKEN: scriptedAiken(dir, steps) });
+  assert.equal(readFileSync(join(dir, 'lib/m.ak'), 'utf8'), ONE_CLAUSE, 'the source is put back');
+  return { ...result, status_of: statusOf(result.stdout, 'only') };
+}
+
+test('only exit status 1 from the tests run is a kill; 0 is a survivor', () => {
+  const killed = judged([0, 0, 1]);
+  assert.equal(killed.status, 0);
+  assert.equal(killed.status_of, 'killed');
+  const survived = judged([0, 0, 0]);
+  assert.equal(survived.status, 1);
+  assert.equal(survived.status_of, 'survived');
+});
+
+test('a tests run that panics (status 101) or is killed by a signal is error, not killed', () => {
+  for (const step of [101, 2, 137, 'kill']) {
+    const result = judged([0, 0, step]);
+    assert.equal(result.status, 1, String(step));
+    assert.equal(result.status_of, 'error', String(step));
+    assert.match(result.stdout, /1 mutants: 0 killed, 0 survived, 0 compile-error, 1 error/, String(step));
+    assert.match(result.stderr, /which says nothing about the tests/, String(step));
+  }
+});
+
+test('a compile run that exits 1 is compile-error; any other failure of it is error', () => {
+  assert.equal(judged([0, 1]).status_of, 'compile-error');
+  for (const step of [101, 2, 'kill']) {
+    const result = judged([0, step]);
+    assert.equal(result.status, 1, String(step));
+    assert.equal(result.status_of, 'error', String(step));
+  }
+});
+
+test('judge gives a verdict only for exit status 0 or 1 without a signal', () => {
+  assert.equal(judge('compile', { status: 0, signal: null }), 'ok');
+  assert.equal(judge('compile', { status: 1, signal: null }), 'compile-error');
+  assert.equal(judge('tests', { status: 0, signal: null }), 'survived');
+  assert.equal(judge('tests', { status: 1, signal: null }), 'killed');
+  for (const stage of ['compile', 'tests']) {
+    assert.equal(judge(stage, { status: 101, signal: null }), 'error');
+    assert.equal(judge(stage, { status: 2, signal: null }), 'error');
+    assert.equal(judge(stage, { status: null, signal: 'SIGKILL' }), 'error');
+    assert.equal(judge(stage, { status: 1, signal: 'SIGTERM' }), 'error');
+  }
 });
 
 // ## parseClause
