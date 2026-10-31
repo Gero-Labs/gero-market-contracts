@@ -24,6 +24,8 @@ jobs:
       - run: npm ci
       - name: Forbidden words
         run: node scripts/forbidden-words.mjs
+      - name: Test vectors
+        run: node scripts/check-vectors.mjs
       - name: Check (fmt, check, build)
         run: npm run check
       - name: Test

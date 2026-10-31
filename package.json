@@ -8,5 +8,8 @@
   "scripts": {
     "test": "node --test \"scripts/*.test.mjs\"",
     "check": "aiken fmt --check && aiken check && aiken build"
+  },
+  "devDependencies": {
+    "@noble/hashes": "2.4.0"
   }
 }
