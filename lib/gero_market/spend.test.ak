@@ -10,7 +10,7 @@ use aiken/collection/list
 use aiken/crypto.{VerificationKeyHash}
 use cardano/address.{from_verification_key}
 use cardano/assets.{from_asset, from_lovelace, merge}
-use cardano/transaction.{Input, Output}
+use cardano/transaction.{Input, Output, OutputReference}
 use gero_market/fixtures.{
   ada_out, buyer_key, creator, fee_addr, fee_addr_other_stake, hash_datum_input,
   listing, listing_input, nft_name, nft_policy, out_ref, seller, seller_key,
@@ -295,6 +295,122 @@ test purchase_hash_datum_listing_fails() fail {
   )
 }
 
+// ## Purchase: first_output below zero
+
+test purchase_first_output_minus_one_selects_index_zero_by_design() {
+  // `list.drop` treats a negative count as zero, so `first_output: -1` reads the same outputs as
+  // 0. The contract does not reject it, and it cannot help a buyer: whichever outputs it selects
+  // must still pay the seller and the royalties in full, tagged for this listing.
+  let outputs = [seller_out(), royalty_out(), fee_out()]
+  and {
+    purchase(base(), 0, outputs, []),
+    purchase(base(), -1, outputs, []),
+  }
+}
+
+test purchase_first_output_minus_one_fails_where_index_zero_fails() {
+  // The seller output is at index 1, so index 0 and -1 both land on the fee output.
+  and {
+    purchase(base(), 1, good_outputs(), []),
+    !purchase(base(), 0, good_outputs(), []),
+    !purchase(base(), -1, good_outputs(), []),
+  }
+}
+
+// ## The listing is not the first input
+//
+// The deposit and the tag come from the input at `own_ref`, wherever it is in the list.
+
+/// The buyer's wallet UTxO, in front of the listing.
+fn buyer_utxo() -> Input {
+  Input {
+    output_reference: OutputReference {
+      transaction_id: #"0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      output_index: 0,
+    },
+    output: ada_out(from_verification_key(buyer_key), 500_000_000),
+  }
+}
+
+/// A second listing at `out_ref(1)`: 100 ADA, no royalty, held with `other_deposit`. Its fee is
+/// the 1.5 ADA minimum, so with ours the fee output must hold 3 ADA.
+fn other_listing_input(other_deposit: Int) -> Input {
+  listing_input(out_ref(1), listing(100_000_000, [], None), other_deposit)
+}
+
+fn two_listings_fee_out() -> Output {
+  ada_out(fee_addr, 3_000_000)
+}
+
+test purchase_with_the_buyers_utxo_first_passes() {
+  let l = base()
+  run(
+    Some(l),
+    Purchase { first_output: 1 },
+    [buyer_utxo(), listing_input(out_ref(0), l, deposit)],
+    good_outputs(),
+    [],
+  )
+}
+
+test cancel_with_the_buyers_utxo_first_passes() {
+  let l = base()
+  run(
+    Some(l),
+    Cancel,
+    [buyer_utxo(), listing_input(out_ref(0), l, deposit)],
+    [],
+    [seller_key],
+  )
+}
+
+test purchase_pays_the_seller_from_its_own_deposit_when_a_dearer_listing_is_first() {
+  // The other listing is first and holds 3 ADA; ours holds 2 ADA, so the seller is due 98.5 ADA,
+  // not 99.5.
+  let l = base()
+  run(
+    Some(l),
+    Purchase { first_output: 1 },
+    [other_listing_input(3_000_000), listing_input(out_ref(0), l, deposit)],
+    [two_listings_fee_out(), seller_out(), royalty_out()],
+    [],
+  )
+}
+
+test purchase_cannot_pay_the_seller_with_the_first_listings_smaller_deposit() {
+  // The other listing is first and holds 1 ADA; ours holds 2 ADA, so 98.5 ADA is due and 97.5
+  // ADA, what the other deposit would give, is short.
+  let l = base()
+  let outputs = [
+    two_listings_fee_out(),
+    tagged_out(seller, 97_500_000, out_ref(0)),
+    royalty_out(),
+  ]
+  !run(
+    Some(l),
+    Purchase { first_output: 1 },
+    [other_listing_input(1_000_000), listing_input(out_ref(0), l, deposit)],
+    outputs,
+    [],
+  )
+}
+
+test purchase_cannot_use_the_first_listings_tag() {
+  let l = base()
+  let outputs = [
+    two_listings_fee_out(),
+    tagged_out(seller, 98_500_000, out_ref(1)),
+    tagged_out(creator, 2_000_000, out_ref(1)),
+  ]
+  !run(
+    Some(l),
+    Purchase { first_output: 1 },
+    [other_listing_input(3_000_000), listing_input(out_ref(0), l, deposit)],
+    outputs,
+    [],
+  )
+}
+
 // ## Cancel (cancel-owner-signed)
 
 test cancel_signed_by_owner_passes() {
@@ -333,4 +449,15 @@ test cancel_hash_datum_listing_passes() {
     [],
     [seller_key],
   )
+}
+
+test cancel_private_listing_by_its_buyer_alone_fails() {
+  // Being the designated buyer gives no right over the listing: only the owner cancels.
+  let l = listing(100_000_000, royalty(), Some(buyer_key))
+  !cancel(l, [buyer_key])
+}
+
+test cancel_private_listing_by_its_owner_passes() {
+  let l = listing(100_000_000, royalty(), Some(buyer_key))
+  cancel(l, [seller_key])
 }

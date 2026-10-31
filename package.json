@@ -7,7 +7,7 @@
   "license": "Apache-2.0",
   "scripts": {
     "test": "node --test \"scripts/*.test.mjs\"",
-    "check": "aiken fmt --check && aiken check && aiken build"
+    "check": "aiken fmt --check && aiken check -D && aiken build -D"
   },
   "devDependencies": {
     "@noble/hashes": "2.4.0"

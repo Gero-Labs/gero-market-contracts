@@ -100,7 +100,7 @@ You need [Aiken](https://aiken-lang.org) v1.1.24 and Node.js 22.
 
 ```sh
 npm ci
-npm run check   # aiken fmt --check, aiken check, aiken build
+npm run check   # aiken fmt --check, aiken check, aiken build (warnings are errors)
 npm test        # tests for the scripts in scripts/
 node scripts/forbidden-words.mjs   # repository hygiene check that CI also runs
 node scripts/mutation-check.mjs    # replaces each marked clause with True; a test must fail (CI runs it)

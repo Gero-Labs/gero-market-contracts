@@ -32,6 +32,15 @@ use gero_market/types.{Action, Cancel, Listing, Payee, Purchase}
 /// - when the listing is private, its buyer signs.
 ///
 /// `Cancel` needs the owner's signature and nothing else, so one transaction can cancel and relist.
+///
+/// A Gero input whose datum is not inline (a datum hash) can be cancelled but never bought. The
+/// ledger hands this validator the datum that a hash stands for, so the `expect Some(l) = datum`
+/// in the body does not reject it. What makes a `Purchase` fail is `total_fees`: it expects every
+/// input at this script, the spent one and any other, to carry an inline `Listing`, and crashes
+/// otherwise. Its result is `fee_due`, which the `fee-covered` clause reads, and no other line
+/// looks at the datum of the other inputs. That clause must therefore keep calling `total_fees`
+/// over all inputs at the script's own hash; narrowing it to the spent input would let a
+/// hash-datum listing, or a transaction that carries one, be bought.
 pub fn validate(
   fee_address: Address,
   fee_bps: Int,

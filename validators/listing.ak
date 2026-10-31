@@ -8,9 +8,7 @@
 use cardano/address.{Address}
 use cardano/script_context.{Minting, ScriptContext}
 use cardano/transaction.{OutputReference, Transaction}
-use gero_market/fixtures.{
-  fee_addr, nft_policy, v1_fee_bps, v1_max_fee, v1_min_fee,
-}
+use gero_market/fixtures
 use gero_market/spend.{validate}
 use gero_market/types.{Action, Listing}
 
@@ -48,7 +46,13 @@ test else_fails() fail {
   let context = ScriptContext {
     transaction: transaction.placeholder,
     redeemer: Void,
-    info: Minting(nft_policy),
+    info: Minting(fixtures.nft_policy),
   }
-  listing.else(fee_addr, v1_fee_bps, v1_min_fee, v1_max_fee, context)
+  listing.else(
+    fixtures.fee_addr,
+    fixtures.v1_fee_bps,
+    fixtures.v1_min_fee,
+    fixtures.v1_max_fee,
+    context,
+  )
 }
