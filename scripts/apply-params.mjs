@@ -6,14 +6,23 @@
 // params.json: { "feeAddress": <bech32>, "feeBps": 100, "minFeeLovelace": 1500000,
 //                "maxFeeLovelace": 5000000 | null }
 //
+// The deployment folder `<dir>/<network>-v<N>/` (default dir: deployments/) must already hold
+// `fee-address.json`, the output of fee-address.mjs for this version. Before anything is applied
+// it is checked against the version and the params (lib/deployment.mjs, feeAddressProblems): its
+// native script is the fee script with the `after` slot equal to N, that script hashes to its
+// scriptHash, its address is params.json's feeAddress and pays to that script hash. A mismatch
+// exits 2. A folder that already holds `plutus.json` or `script.json` is a deployed one and is
+// refused (exit 2), never overwritten.
+//
 // The committed, unapplied `plutus.json` is the input and is never changed. The parameters are
 // applied one by one in declaration order (fee_address, fee_bps, min_fee, max_fee) with
 // `aiken blueprint apply`, then `aiken blueprint hash` gives the script hash. The result is
-// written to `<dir>/<network>-v<N>/` (default dir: deployments/):
+// written to the deployment folder:
 //
 //   plutus.json   the blueprint with every parameter applied
 //   script.json   { scriptHash, compiledCode }
-//   params.json   a copy of the params that were applied (when --params is not that very file)
+//   params.json   a copy of the params that were applied (when --params is not that very file;
+//                 a different params.json already in the folder is refused)
 //
 // The Plutus data of each parameter is encoded here, by hand, as CBOR. Aiken checks the shape of
 // each parameter against the blueprint schema, which refuses a bare integer for max_fee, but a
@@ -27,9 +36,9 @@
 // the version that built the blueprint, exits 2; hashes that disagree with each other exit 1.
 
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { constants, copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 
 import {
   BLUEPRINT_PATH,
@@ -40,6 +49,8 @@ import {
   UsageError,
   VALIDATOR_TITLE,
   deploymentPaths,
+  entryExists,
+  feeAddressProblems,
   isMain,
   parseCli,
   parseNetwork,
@@ -174,6 +185,27 @@ function applyAll(parameterHex, workDir) {
 
 // ---------------------------------------------------------------------------------------------
 
+/**
+ * A deployed folder is never edited: one that holds plutus.json or script.json is refused, and so
+ * is a params.json in it that differs from the one being applied.
+ */
+function refuseDeployedFolder(paths, paramsPath) {
+  // OX Agent: Path Traversal prevented by naming only the fixed files of a folder deploymentPaths resolved inside --dir
+  const present = [paths.plutus, paths.script].filter(entryExists).map((path) => basename(path));
+  if (present.length > 0) {
+    throw new UsageError(
+      `${paths.folder} already contains ${present.join(' and ')}. A deployed folder is never edited: ` +
+        'use the next version number and a new folder.',
+    );
+  }
+  if (entryExists(paths.params) && resolve(paramsPath) !== paths.params) {
+    const same = readFileSync(paramsPath).equals(readFileSync(paths.params));
+    if (!same) {
+      throw new UsageError(`${paths.params} already exists and differs from ${paramsPath}; apply the params that are in the folder`);
+    }
+  }
+}
+
 function main() {
   const values = parseCli({
     network: { type: 'string' },
@@ -187,6 +219,12 @@ function main() {
   const paths = deploymentPaths(values.dir ?? DEFAULT_DEPLOYMENTS_DIR, network, version);
 
   const params = validateParams(readJsonFile(paramsPath, 'the params file'), network);
+
+  // The fee address must belong to this version and these params before anything is written.
+  const problems = feeAddressProblems(readJsonFile(paths.feeAddress, 'fee-address.json'), { version, feeAddress: params.feeAddress });
+  if (problems.length > 0) throw new UsageError(problems.join('\n'));
+  refuseDeployedFolder(paths, paramsPath);
+
   const encoded = encodeParams(params);
   const parameterHex = PARAMETER_TITLES.map((title) => encoded[title]);
 
@@ -206,10 +244,10 @@ function main() {
       }
     }
 
-    mkdirSync(paths.folder, { recursive: true });
-    copyFileSync(applied, paths.plutus);
-    writeFileSync(paths.script, `${JSON.stringify({ scriptHash, compiledCode: spend.compiledCode }, null, 2)}\n`);
-    if (resolve(paramsPath) !== paths.params) copyFileSync(paramsPath, paths.params);
+    // 'wx' and COPYFILE_EXCL fail if the file appeared since the check above; nothing is overwritten.
+    copyFileSync(applied, paths.plutus, constants.COPYFILE_EXCL);
+    writeFileSync(paths.script, `${JSON.stringify({ scriptHash, compiledCode: spend.compiledCode }, null, 2)}\n`, { flag: 'wx' });
+    if (resolve(paramsPath) !== paths.params && !entryExists(paths.params)) copyFileSync(paramsPath, paths.params, constants.COPYFILE_EXCL);
 
     const parameters = Object.fromEntries(PARAMETER_TITLES.map((title, i) => [title, parameterHex[i]]));
     console.log(JSON.stringify({ scriptHash, directory: paths.folder, parameters }, null, 2));

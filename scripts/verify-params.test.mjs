@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { copyFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 
@@ -12,12 +12,15 @@ import {
   aikenApply,
   aikenTest,
   assertBadInput,
+  baseAddress,
   feeAddressFor,
+  madeUpKeyHash,
   runScript,
   splitBaseAddress,
   symlinkedRepo,
   tempDirs,
   v1Params,
+  writeFeeAddress,
   writeParams,
 } from './test-helpers.mjs';
 
@@ -29,7 +32,7 @@ const unapplied = JSON.parse(readFileSync(BLUEPRINT, 'utf8')).validators[0];
 /** Applies the params with the real apply-params and returns the deployments folder it used. */
 function deploy({ network = 'preprod', version = 1, overrides = {} } = {}) {
   const dir = dirs.make('verify-run-');
-  const fee = feeAddressFor(network, version);
+  const fee = writeFeeAddress(dir, network, version);
   writeParams(dir, network, version, v1Params(fee.address, overrides));
   const folder = join(dir, `${network}-v${version}`);
   const result = runScript('apply-params.mjs', [
@@ -162,6 +165,7 @@ aikenTest('catches the parameter encoding mistakes that still give a valid scrip
   const folderFor = ({ scriptHash, compiledCode, blueprintPath }) => {
     const dir = dirs.make('verify-mistake-');
     const folder = join(dir, 'preprod-v1');
+    writeFeeAddress(dir, 'preprod', 1, fee);
     writeParams(dir, 'preprod', 1, params);
     writeJson(join(folder, 'script.json'), { scriptHash, compiledCode });
     copyFileSync(blueprintPath, join(folder, 'plutus.json'));
@@ -193,7 +197,7 @@ function lucidBuild(parameters, order) {
 
 test('a script.json hash that does not match exits 1 and prints both hashes (no Aiken needed)', () => {
   const dir = dirs.make('verify-static-');
-  const fee = feeAddressFor('preprod', 1);
+  const fee = writeFeeAddress(dir, 'preprod', 1);
   const folder = join(dir, 'preprod-v1');
   writeParams(dir, 'preprod', 1, v1Params(fee.address));
   const fake = '00'.repeat(28);
@@ -209,7 +213,7 @@ test('a script.json hash that does not match exits 1 and prints both hashes (no 
 test('started through a symlink to the repo, a tampered script.json still exits 1 (it must not exit 0 unchecked)', () => {
   const repo = symlinkedRepo(dirs.make('verify-link-'));
   const dir = dirs.make('verify-static-');
-  const fee = feeAddressFor('preprod', 1);
+  const fee = writeFeeAddress(dir, 'preprod', 1);
   const folder = join(dir, 'preprod-v1');
   writeParams(dir, 'preprod', 1, v1Params(fee.address));
   const fake = '00'.repeat(28);
@@ -243,6 +247,11 @@ test('bad input exits 2: missing files, unreadable JSON, unknown network, bad ve
   assertBadInput(runScript('verify-params.mjs', base), /plutus\.json/, 'no plutus.json');
 
   copyFileSync(BLUEPRINT, join(folder, 'plutus.json'));
+  assertBadInput(runScript('verify-params.mjs', base), /fee-address\.json/, 'no fee-address.json');
+
+  writeFileSync(join(folder, 'fee-address.json'), '{ not json');
+  assertBadInput(runScript('verify-params.mjs', base), /fee-address\.json/, 'fee-address.json not JSON');
+
   writeFileSync(join(folder, 'params.json'), JSON.stringify({ ...v1Params(fee.address), feeBps: 0 }));
   assertBadInput(runScript('verify-params.mjs', base), /feeBps/, 'params fail the same checks as apply-params');
 
@@ -250,4 +259,59 @@ test('bad input exits 2: missing files, unreadable JSON, unknown network, bad ve
   assertBadInput(runScript('verify-params.mjs', ['--network=preprod', '--version=0', `--dir=${dir}`]), /version/, 'version');
   assertBadInput(runScript('verify-params.mjs', ['--version=1', `--dir=${dir}`]), /network/, 'no network');
   assertBadInput(runScript('verify-params.mjs', [...base, '--bogus=1']), /bogus/, 'unknown option');
+});
+
+// ---------------------------------------------------------------------------------------------
+// fee-address.json binds the fee address to the version
+
+const messageOf = (result) => `${result.stdout}\n${result.stderr}`;
+
+aikenTest('a fee-address.json that does not match the version, the params or itself exits 1 and says so', () => {
+  const swappedSigner = (record) => {
+    const copy = structuredClone(record);
+    copy.nativeScript.scripts[0].scripts[1].keyHash = madeUpKeyHash('someone-else');
+    copy.nativeScript.scripts[0].scripts.sort((a, b) => (a.keyHash < b.keyHash ? -1 : 1));
+    return copy;
+  };
+  const otherVersion = () => feeAddressFor('preprod', 2);
+  const slotChanged = (record) => {
+    const copy = structuredClone(record);
+    copy.nativeScript.scripts[1].slot = 2;
+    return copy;
+  };
+  const { stakeHash } = splitBaseAddress(feeAddressFor('preprod', 1).address);
+  const forged = baseAddress({ network: 'preprod', type: 1, paymentHash: madeUpKeyHash('elsewhere'), stakeHash });
+  const cases = [
+    ['a swapped signer', swappedSigner, /fee-address\.json.*hash|hash.*fee-address\.json/is],
+    ['the version 2 record in the version 1 folder', otherVersion, /version/i],
+    ['the after slot edited', slotChanged, /version/i],
+    ['the scriptHash edited', (r) => ({ ...r, scriptHash: flip(r.scriptHash) }), /hash/i],
+    ['the address edited to another address', (r) => ({ ...r, address: feeAddressFor('preprod', 2).address }), /params\.json feeAddress/i],
+    ['an address that does not pay to the script', (r) => ({ ...r, address: forged }), /payment/i],
+  ];
+  for (const [label, change, pattern] of cases) {
+    const run = deploy();
+    const path = join(run.folder, 'fee-address.json');
+    writeJson(path, change(readJson(path)));
+    const result = verify(run);
+    assert.equal(result.status, 1, `${label}\n${messageOf(result)}`);
+    assert.equal(result.stderr, '', label);
+    assert.match(result.stdout, pattern, label);
+    assert.match(result.stdout, /fee-address\.json/, `${label}: names the file`);
+  }
+});
+
+aikenTest('params.json pointed at another fee address after applying exits 1, also for the address mismatch', () => {
+  const run = deploy();
+  const path = join(run.folder, 'params.json');
+  writeJson(path, { ...readJson(path), feeAddress: feeAddressFor('preprod', 2).address });
+  const result = verify(run);
+  assert.equal(result.status, 1, messageOf(result));
+  assert.match(result.stdout, /params\.json feeAddress/);
+});
+
+aikenTest('a deployment without fee-address.json exits 2 even though the hashes agree', () => {
+  const run = deploy();
+  rmSync(join(run.folder, 'fee-address.json'));
+  assertBadInput(verify(run), /fee-address\.json/, 'missing');
 });

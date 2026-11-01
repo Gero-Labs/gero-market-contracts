@@ -7,12 +7,12 @@
 // Nothing here builds the Plutus data of the contract parameters. apply-params.mjs and
 // verify-params.mjs each do that on their own, so that they stay two separate implementations.
 
-import { readFileSync } from 'node:fs';
+import { lstatSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
-import { getAddressDetails } from '@lucid-evolution/lucid';
+import { getAddressDetails, scriptFromNative, validatorToScriptHash } from '@lucid-evolution/lucid';
 
 export { isMain } from './is-main.mjs';
 
@@ -30,10 +30,13 @@ export const NETWORKS = {
 };
 
 /**
- * The version number is the `invalidBefore` slot of the fee address, which has to be in the past
- * for the fee address to be spendable. Both networks are far beyond this slot, so a version below
- * the cap is always satisfied and cannot lock the fees. A slip such as a date (20261101) is
- * refused instead of producing a fee address that nobody can spend from.
+ * The version number is the `invalidBefore` slot of the fee address. That timelock is satisfied
+ * only by a transaction whose validity interval has a lower bound of at least N: a spend from the
+ * fee address must set `invalid_before >= N`, and a transaction with no lower bound fails the
+ * script. Both networks are far beyond the cap, so a sweep can always pick a lower bound that is
+ * both at least N and already in the past (the current slot works). A slip such as a Unix time
+ * (a slot that lies decades ahead) is refused instead of producing a fee address that nobody can
+ * spend from for years.
  */
 export const MAX_VERSION = 1_000_000;
 
@@ -130,10 +133,22 @@ export function deploymentPaths(dir, network, version) {
   if (!folder.startsWith(base + sep)) throw new UsageError(`${network}-v${version} is not a folder inside ${base}`);
   return {
     folder,
+    feeAddress: join(folder, 'fee-address.json'),
     params: join(folder, 'params.json'),
     plutus: join(folder, 'plutus.json'),
     script: join(folder, 'script.json'),
   };
+}
+
+/** Whether anything is at `path`, a dangling symlink included (`existsSync` would follow it and say no). */
+export function entryExists(path) {
+  try {
+    lstatSync(path);
+    return true;
+  } catch (error) {
+    if (error.code === 'ENOENT') return false;
+    throw new UsageError(`cannot look at ${path}: ${error.message}`);
+  }
 }
 
 /** The committed, unapplied blueprint, and its validator, checked to have the expected parameters. */
@@ -230,4 +245,113 @@ export function validateParams(params, network) {
     minFee: BigInt(minFeeLovelace),
     maxFee: maxFeeLovelace === null ? null : BigInt(maxFeeLovelace),
   };
+}
+
+// ---------------------------------------------------------------------------------------------
+// fee-address.json
+
+const FEE_ADDRESS_KEYS = ['nativeScript', 'scriptHash', 'address'];
+
+const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+/** True when `value` is an object whose own keys are exactly `keys` (any order). */
+function hasExactKeys(value, keys) {
+  if (!isRecord(value)) return false;
+  const own = Object.keys(value);
+  return own.length === keys.length && keys.every((key) => Object.hasOwn(value, key));
+}
+
+/**
+ * Reads the native script of a fee address: exactly the shape fee-address.mjs makes,
+ *
+ *   all [ atLeast 2 of (sig a, sig b, sig c), after <slot> ]   with a < b < c as hex strings.
+ *
+ * Returns `{ slot }`, or `{ problem }` naming what differs. Nothing else is accepted, so
+ * a record that was edited into a weaker script (one signer, no timelock) cannot pass.
+ */
+function readFeeNativeScript(script) {
+  if (!hasExactKeys(script, ['type', 'scripts']) || script.type !== 'all' || !Array.isArray(script.scripts) || script.scripts.length !== 2) {
+    return { problem: 'it is not `all` of exactly two scripts' };
+  }
+  const [threshold, timelock] = script.scripts;
+  if (
+    !hasExactKeys(threshold, ['type', 'required', 'scripts']) ||
+    threshold.type !== 'atLeast' ||
+    threshold.required !== 2 ||
+    !Array.isArray(threshold.scripts) ||
+    threshold.scripts.length !== 3
+  ) {
+    return { problem: 'the first script is not `atLeast` 2 of exactly three signers' };
+  }
+  const signers = threshold.scripts.map((signer) =>
+    hasExactKeys(signer, ['type', 'keyHash']) && signer.type === 'sig' && typeof signer.keyHash === 'string' && KEY_HASH.test(signer.keyHash)
+      ? signer.keyHash
+      : null,
+  );
+  if (signers.includes(null)) return { problem: 'a signer is not `sig` with a key hash (56 lowercase hex characters)' };
+  if (!(signers[0] < signers[1] && signers[1] < signers[2])) {
+    return { problem: 'the signers are not three different key hashes in ascending order' };
+  }
+  if (!hasExactKeys(timelock, ['type', 'slot']) || timelock.type !== 'after' || !Number.isSafeInteger(timelock.slot)) {
+    return { problem: 'the second script is not `after` a whole slot number' };
+  }
+  return { slot: timelock.slot };
+}
+
+/**
+ * Checks the fee-address.json of a deployment against its version and its params.json, and
+ * returns the problems found (an empty list when it is sound). It never throws on a bad record.
+ *
+ * The record is what fee-address.mjs printed: { nativeScript, scriptHash, address }. A deployment
+ * is bound to it by four facts, each checked here without the parameter encoder:
+ *
+ *   1. the native script is the fee script, and its `after` slot is the version;
+ *   2. the hash of that native script, derived again here, is `scriptHash`;
+ *   3. `address` is the `feeAddress` of params.json, character for character;
+ *   4. the address's payment credential is that script hash.
+ *
+ * `feeAddress` is the value from params.json and `version` the number of the deployment.
+ */
+export function feeAddressProblems(record, { version, feeAddress }) {
+  // OX Agent: Prototype Pollution prevented by accepting only the three known own keys and reading them with Object.hasOwn
+  if (!hasExactKeys(record, FEE_ADDRESS_KEYS)) {
+    return [`fee-address.json must be the object fee-address.mjs prints, with exactly ${FEE_ADDRESS_KEYS.join(', ')}`];
+  }
+  const { nativeScript, scriptHash, address } = record;
+  const problems = [];
+
+  const script = readFeeNativeScript(nativeScript);
+  if (script.problem !== undefined) {
+    problems.push(`fee-address.json nativeScript is not the fee native script: ${script.problem}`);
+  } else if (script.slot !== version) {
+    problems.push(`fee-address.json nativeScript has after slot ${script.slot}, this deployment is version ${version}`);
+  }
+
+  if (typeof scriptHash !== 'string' || !KEY_HASH.test(scriptHash)) {
+    problems.push('fee-address.json scriptHash is not a script hash (56 lowercase hex characters)');
+  } else if (script.problem === undefined) {
+    const derived = validatorToScriptHash(scriptFromNative(nativeScript));
+    if (derived !== scriptHash) {
+      problems.push(`fee-address.json scriptHash ${scriptHash} is not the hash of its nativeScript (${derived})`);
+    }
+  }
+
+  if (typeof address !== 'string') {
+    problems.push('fee-address.json address is not a string');
+    return problems;
+  }
+  if (address !== feeAddress) {
+    problems.push(`fee-address.json address ${address} is not params.json feeAddress ${feeAddress}`);
+  }
+  let payment;
+  try {
+    payment = getAddressDetails(address).paymentCredential;
+  } catch {
+    problems.push(`fee-address.json address ${address} is not a valid Cardano address`);
+    return problems;
+  }
+  if (payment?.type !== 'Script' || payment.hash !== scriptHash) {
+    problems.push(`fee-address.json address ${address} does not pay to its scriptHash (payment credential is ${payment?.type} ${payment?.hash})`);
+  }
+  return problems;
 }

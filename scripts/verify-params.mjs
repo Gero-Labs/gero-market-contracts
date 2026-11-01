@@ -12,11 +12,17 @@
 // the two hashes only agree when both implementations got every parameter right. Lucid Evolution
 // does no shape check at all, which is one more reason the encoding is compared and not trusted.
 //
-// Exit 0 only when all of these hold; otherwise exit 1 and the hashes are printed:
+// It also checks `fee-address.json` (the output of fee-address.mjs for this version) against the
+// version and params.json, without the parameter encoder: its native script is the fee script with
+// the `after` slot equal to the version, that script hashes to its scriptHash, its address is
+// params.json's feeAddress and pays to that script hash (lib/deployment.mjs, feeAddressProblems).
+//
+// Exit 0 only when all of these hold; otherwise exit 1 and the hashes (or the mismatch) are printed:
 //   1. the re-applied script hashes to script.json's scriptHash;
 //   2. script.json's compiledCode hashes to its own scriptHash;
-//   3. plutus.json (the applied blueprint) holds that same code and hash.
-// A missing or unreadable file, or bad options, exits 2.
+//   3. plutus.json (the applied blueprint) holds that same code and hash;
+//   4. fee-address.json matches the version and params.json as described above.
+// A missing or unreadable file (fee-address.json included), or bad options, exits 2.
 
 import { CML, Constr, applyParamsToScript, validatorToScriptHash } from '@lucid-evolution/lucid';
 
@@ -26,6 +32,7 @@ import {
   UsageError,
   VALIDATOR_TITLE,
   deploymentPaths,
+  feeAddressProblems,
   isMain,
   parseCli,
   parseNetwork,
@@ -94,6 +101,7 @@ function main() {
   validateParams(rawParams, network); // the same checks as apply-params; the values below come from the raw JSON
   const script = readScriptJson(paths.script);
   const deployed = readJsonFile(paths.plutus, 'plutus.json');
+  const feeAddress = readJsonFile(paths.feeAddress, 'fee-address.json');
 
   const parameters = [
     feeAddressData(rawParams.feeAddress),
@@ -126,6 +134,10 @@ function main() {
         `  script.json scriptHash:             ${script.scriptHash}\n` +
         `  plutus.json ${VALIDATOR_TITLE} hash: ${spend?.hash}`,
     );
+  }
+  // The fee address record must belong to this version and these params, whatever the encoders did.
+  for (const problem of feeAddressProblems(feeAddress, { version, feeAddress: rawParams.feeAddress })) {
+    problems.push(`MISMATCH: ${problem}`);
   }
   if (problems.length > 0) throw new CheckFailure(problems.join('\n'));
 

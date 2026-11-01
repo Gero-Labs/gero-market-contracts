@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 
@@ -24,6 +24,7 @@ import {
   symlinkedRepo,
   tempDirs,
   v1Params,
+  writeFeeAddress,
   writeParams,
 } from './test-helpers.mjs';
 
@@ -312,6 +313,7 @@ test('an Aiken that is not v1.1.24, or none at all, exits 2 and writes nothing',
   const out = dirs.make('apply-out-');
   const params = join(input, 'params.json');
   writeFileSync(params, JSON.stringify(v1Params(PREPROD_FEE.address)));
+  writeFeeAddress(out, 'preprod', 1, PREPROD_FEE);
   const args = ['--network=preprod', '--version=1', `--params=${params}`, `--dir=${out}`];
 
   const missing = runScript('apply-params.mjs', args, { env: { ...process.env, PATH: bin } });
@@ -322,7 +324,7 @@ test('an Aiken that is not v1.1.24, or none at all, exits 2 and writes nothing',
   chmodSync(fake, 0o755);
   const wrong = runScript('apply-params.mjs', args, { env: { ...process.env, PATH: bin } });
   assertBadInput(wrong, /v1\.1\.24/, 'wrong aiken version');
-  assert.deepEqual(readdirSync(out), []);
+  assert.deepEqual(readdirSync(join(out, 'preprod-v1')), ['fee-address.json'], 'nothing written next to it');
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -330,10 +332,14 @@ test('an Aiken that is not v1.1.24, or none at all, exits 2 and writes nothing',
 
 const NET = 'preprod';
 
-/** Runs apply-params for the sample fee address and returns the summary and the output folder. */
-function applied(overrides = {}, { network = NET, version = 1, feeAddress = PREPROD_FEE.address } = {}) {
+/**
+ * Runs apply-params for the fee address of that network and version (saved as fee-address.json,
+ * as an operator would) and returns the summary and the output folder.
+ */
+function applied(overrides = {}, { network = NET, version = 1 } = {}) {
   const dir = dirs.make('apply-run-');
-  const params = writeParams(dir, network, version, v1Params(feeAddress, overrides));
+  const fee = writeFeeAddress(dir, network, version);
+  const params = writeParams(dir, network, version, v1Params(fee.address, overrides));
   const result = runScript('apply-params.mjs', [
     '--network', network,
     '--version', String(version),
@@ -414,7 +420,7 @@ aikenTest('each parameter changes the script hash', () => {
     feeBps: applied({ feeBps: 101 }),
     minFeeLovelace: applied({ minFeeLovelace: 1_500_001 }),
     maxFeeLovelace: applied({ maxFeeLovelace: 5_000_001 }),
-    feeAddress: applied({}, { version: 2, feeAddress: feeAddressFor('preprod', 2).address }),
+    feeAddress: applied({}, { version: 2 }), // another version: another fee address
   };
   const hashes = [base, ...Object.values(variants).map((v) => v.script.scriptHash)];
   assert.equal(new Set(hashes).size, hashes.length, JSON.stringify(Object.keys(variants)));
@@ -424,22 +430,125 @@ aikenTest('keeps a copy of the params next to the result when they came from els
   const input = dirs.make('apply-input-');
   const out = dirs.make('apply-out-');
   const params = join(input, 'my-params.json');
-  writeFileSync(params, `${JSON.stringify(v1Params(PREPROD_FEE.address))}\n`);
+  const fee = writeFeeAddress(out, 'preprod', 3);
+  writeFileSync(params, `${JSON.stringify(v1Params(fee.address))}\n`);
   const result = runScript('apply-params.mjs', ['--network=preprod', '--version=3', `--params=${params}`, `--dir=${out}`]);
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   assert.deepEqual(
     readFileSync(join(out, 'preprod-v3', 'params.json')),
     readFileSync(params),
   );
-  assert.deepEqual(readdirSync(join(out, 'preprod-v3')).sort(), ['params.json', 'plutus.json', 'script.json']);
+  assert.deepEqual(readdirSync(join(out, 'preprod-v3')).sort(), ['fee-address.json', 'params.json', 'plutus.json', 'script.json']);
 });
 
 aikenTest('params already inside the deployment folder are used in place', () => {
   const dir = dirs.make('apply-run-');
-  const params = writeParams(dir, 'mainnet', 2, v1Params(MAINNET_FEE.address));
+  const fee = writeFeeAddress(dir, 'mainnet', 2);
+  const params = writeParams(dir, 'mainnet', 2, v1Params(fee.address));
   const original = readFileSync(params);
   const result = runScript('apply-params.mjs', ['--network=mainnet', '--version=2', `--params=${params}`, `--dir=${dir}`]);
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   assert.deepEqual(readFileSync(params), original);
-  assert.deepEqual(readdirSync(join(dir, 'mainnet-v2')).sort(), ['params.json', 'plutus.json', 'script.json']);
+  assert.deepEqual(readdirSync(join(dir, 'mainnet-v2')).sort(), ['fee-address.json', 'params.json', 'plutus.json', 'script.json']);
+});
+
+// ---------------------------------------------------------------------------------------------
+// A deployed folder is never edited
+
+/** A deployment folder ready to apply, with the files of `existing` already in it. */
+function folderWith(existing = {}, { version = 1 } = {}) {
+  const dir = dirs.make('apply-existing-');
+  const fee = writeFeeAddress(dir, 'preprod', version);
+  const params = writeParams(dir, 'preprod', version, v1Params(fee.address));
+  const folder = join(dir, `preprod-v${version}`);
+  for (const [name, content] of Object.entries(existing)) writeFileSync(join(folder, name), content);
+  const run = () => runScript('apply-params.mjs', ['--network=preprod', `--version=${version}`, `--params=${params}`, `--dir=${dir}`]);
+  return { dir, folder, params, run };
+}
+
+const snapshot = (folder) => Object.fromEntries(readdirSync(folder).map((name) => [name, readFileSync(join(folder, name), 'utf8')]));
+
+test('a folder that already holds plutus.json or script.json is refused and left exactly as it was', () => {
+  const cases = {
+    'plutus.json': { 'plutus.json': 'deployed blueprint' },
+    'script.json': { 'script.json': 'deployed script' },
+    'both': { 'plutus.json': 'deployed blueprint', 'script.json': 'deployed script' },
+  };
+  for (const [label, existing] of Object.entries(cases)) {
+    const { folder, run } = folderWith(existing);
+    const before = snapshot(folder);
+    const result = run();
+    assertBadInput(result, /already (contains|has)/i, label);
+    assert.match(result.stderr, /plutus\.json|script\.json/, label);
+    assert.deepEqual(snapshot(folder), before, `${label}: nothing changed`);
+  }
+});
+
+test('a dangling symlink named plutus.json or script.json counts as present and is not written through', () => {
+  for (const name of ['plutus.json', 'script.json']) {
+    const { folder, run } = folderWith();
+    const target = join(dirs.make('apply-target-'), 'elsewhere.json');
+    symlinkSync(target, join(folder, name));
+    assertBadInput(run(), /already (contains|has)/i, name);
+    assert.equal(existsSync(target), false, `${name}: the link target was not created`);
+  }
+});
+
+test('params.json already in the folder is not replaced by a different one from elsewhere', () => {
+  const { folder, params } = folderWith();
+  const elsewhere = join(dirs.make('apply-other-'), 'params.json');
+  const same = JSON.parse(readFileSync(params, 'utf8'));
+  writeFileSync(elsewhere, JSON.stringify({ ...same, feeBps: 250 }));
+  const before = snapshot(folder);
+  const result = runScript('apply-params.mjs', ['--network=preprod', '--version=1', `--params=${elsewhere}`, `--dir=${join(folder, '..')}`]);
+  assertBadInput(result, /params\.json/, 'a different params.json');
+  assert.deepEqual(snapshot(folder), before);
+});
+
+aikenTest('applying twice: the second run is refused and the first run\'s files are untouched', () => {
+  const { folder, run } = folderWith();
+  const first = run();
+  assert.equal(first.status, 0, `${first.stdout}\n${first.stderr}`);
+  const after1 = snapshot(folder);
+  assert.deepEqual(Object.keys(after1).sort(), ['fee-address.json', 'params.json', 'plutus.json', 'script.json']);
+  assertBadInput(run(), /already (contains|has)/i, 'second run');
+  assert.deepEqual(snapshot(folder), after1, 'byte for byte');
+});
+
+// ---------------------------------------------------------------------------------------------
+// fee-address.json binds the fee address to the version
+
+test('a folder with no fee-address.json is refused', () => {
+  const dir = dirs.make('apply-nofee-');
+  const params = writeParams(dir, 'preprod', 1, v1Params(PREPROD_FEE.address));
+  const result = runScript('apply-params.mjs', ['--network=preprod', '--version=1', `--params=${params}`, `--dir=${dir}`]);
+  assertBadInput(result, /fee-address\.json/, 'missing');
+  assert.deepEqual(readdirSync(join(dir, 'preprod-v1')), ['params.json']);
+});
+
+test('a fee-address.json that does not match the version, the params or itself is refused and nothing is written', () => {
+  const v1 = feeAddressFor('preprod', 1);
+  const v2 = feeAddressFor('preprod', 2);
+  const swapped = structuredClone(v1);
+  swapped.nativeScript.scripts[0].scripts[1].keyHash = madeUpKeyHash('someone-else');
+  swapped.nativeScript.scripts[0].scripts.sort((a, b) => (a.keyHash < b.keyHash ? -1 : 1));
+  const { stakeHash } = splitBaseAddress(v1.address);
+  const forgedAddress = baseAddress({ network: 'preprod', type: 1, paymentHash: madeUpKeyHash('elsewhere'), stakeHash });
+  const cases = [
+    // [label, version of the folder, the record in it, the feeAddress in params.json, pattern]
+    ['the version 1 record in a version 2 folder', 2, v1, v1.address, /after slot 1.*version 2/i],
+    ['a swapped signer', 1, swapped, v1.address, /hash/i],
+    ['params.json names another fee address', 1, v1, v2.address, /params\.json feeAddress/i],
+    ['the record names another address', 1, { ...v1, address: v2.address }, v1.address, /params\.json feeAddress/i],
+    ['an address that does not pay to the script', 1, { ...v1, address: forgedAddress }, forgedAddress, /payment/i],
+    ['a record with an extra field', 1, { ...v1, note: 'x' }, v1.address, /fee-address\.json/],
+  ];
+  for (const [label, version, record, feeAddress, pattern] of cases) {
+    const dir = dirs.make('apply-bad-fee-');
+    writeFeeAddress(dir, 'preprod', version, record);
+    const params = writeParams(dir, 'preprod', version, v1Params(feeAddress));
+    const result = runScript('apply-params.mjs', ['--network=preprod', `--version=${version}`, `--params=${params}`, `--dir=${dir}`]);
+    assertBadInput(result, pattern, label);
+    assert.deepEqual(readdirSync(join(dir, `preprod-v${version}`)).sort(), ['fee-address.json', 'params.json'], `${label}: nothing written`);
+  }
 });

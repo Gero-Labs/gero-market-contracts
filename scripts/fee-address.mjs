@@ -7,10 +7,13 @@
 //
 //   all [ atLeast 2 of (sig k1, sig k2, sig k3), invalidBefore <N> ]
 //
-// and its stake part is the given stake key. The `invalidBefore` slot is the version number: it is
-// long in the past, so it never blocks a spend, but it gives every contract version its own script
-// hash and address with the same signers (spec 5.9). The three signer key hashes are sorted
-// ascending before the script is built, so the order they are given in changes nothing.
+// and its stake part is the given stake key. The `invalidBefore` slot is the version number: it
+// gives every contract version its own script hash and address with the same signers (spec 5.9).
+// It is a real timelock, not a no-op: a spend from the fee address needs a transaction whose
+// validity interval has a lower bound of at least N (`invalid_before >= N`), and a transaction with
+// no lower bound fails the script. The slot is far in the past, so any lower bound from N up to
+// the current slot works; a sweep must set one. The three signer key hashes are sorted ascending
+// before the script is built, so the order they are given in changes nothing.
 //
 // Prints { nativeScript, scriptHash, address } as JSON. Key hashes are 56 lowercase hex characters
 // (28 bytes). Exit 0 on success; bad input exits 2 with a message on stderr.

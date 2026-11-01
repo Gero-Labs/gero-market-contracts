@@ -290,3 +290,14 @@ export function feeAddressFor(network, version) {
   assert.equal(result.status, 0, `fee-address failed:\n${result.stdout}\n${result.stderr}`);
   return JSON.parse(result.stdout);
 }
+
+/**
+ * Writes `<dir>/<network>-v<version>/fee-address.json`, the way an operator saves the output of
+ * fee-address.mjs (the record, indented by two, a final newline). Returns the record.
+ */
+export function writeFeeAddress(dir, network, version, record = feeAddressFor(network, version)) {
+  const folder = join(dir, `${network}-v${version}`);
+  mkdirSync(folder, { recursive: true });
+  writeFileSync(join(folder, 'fee-address.json'), `${JSON.stringify(record, null, 2)}\n`);
+  return record;
+}
