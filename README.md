@@ -22,8 +22,9 @@ A buyer then spends the listing and pays what the rules below ask for. Or the ow
 
 The contract runs only when a listing is spent. It cannot check a listing when it is created, so
 Gero Wallet verifies the datum against what the seller chose before it asks for a signature.
-Funds sent to the script address without a valid listing datum can be locked for good: the wallet
-never does this, and nobody should do it by hand.
+Funds sent to the script address with no datum, or with a datum that is not a listing, are locked
+for good: neither the owner nor a buyer can ever spend them. The wallet never does this, and nobody
+should do it by hand.
 
 ## Fee terms (version 1)
 
@@ -115,8 +116,13 @@ npm ci
 npm run check   # aiken fmt --check, aiken check, aiken build (warnings are errors)
 npm test        # tests for the scripts in scripts/
 node scripts/forbidden-words.mjs   # repository hygiene check that CI also runs
-node scripts/mutation-check.mjs    # replaces each marked clause with True; a test must fail (CI runs it)
+node scripts/check-vectors.mjs     # the tag vectors, rebuilt without Aiken
+node scripts/verify-deployments.mjs  # every committed deployment, its parameters applied a second way
+node scripts/eval-applied.mjs      # every deployment's applied script, run on committed script contexts
+node scripts/mutation-check.mjs    # replaces each marked clause with True; a test must fail
 ```
+
+CI runs every one of these.
 
 `aiken build` writes the blueprint to `plutus.json`. The toolchain is pinned in `aiken.toml`:
 compiler v1.1.24, Plutus V3, standard library v4.0.0 and fuzz v3.0.0.

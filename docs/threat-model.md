@@ -33,7 +33,7 @@ Gero Wallet; the contract cannot help) or **Chain** (a property of the ledger).
 |---|---|---|---|
 | T1 | Double satisfaction: two listings bought together share one seller or royalty output | Contract | Those outputs must carry the listing's own tag (a hash of its output reference), so one output counts for one listing only |
 | T2 | Several listings share one fee | Contract | The outputs at the fee address must hold the **sum** of the fees of every listing of this script in the transaction |
-| T3 | A transaction spending listings of two contract versions pays one fee for both | Deployment | Each version has its own fee address, so the sum of one version cannot cover another |
+| T3 | A transaction spending listings of two contract versions, or of two contracts that charge a fee, pays one fee for both | Deployment | A fee address is used by exactly one version of exactly one contract, so the sum of one cannot cover another. Versions are kept apart by the version number in the fee script. Contracts are not yet: the fee address is derived from the three signers and the version number alone, so a second fee-charging contract derived with the same signers and number would get the same address, and one output could pay both contracts' fees. Before a second fee-charging contract exists, its fee address needs a per-contract discriminator (see [deploying.md](deploying.md#rules-that-never-bend)) |
 | T4 | The fee is skipped or redirected | Contract, Deployment | The fee address and the amount come from the compiled parameters and the datum price, compared as the full address. There is no waiver key and no fee field in the datum |
 | T5 | A buyer (A.D. Labs included) overpays the fee to underpay the seller | Contract | The seller's due is computed from the datum and the parameters, never from the amounts actually paid |
 | T6 | A listing advertises a lower price than buyers pay (negative royalty entries) | Contract | Every royalty must be greater than zero, so the seller's due can never exceed `price - fee + deposit` |
@@ -42,7 +42,7 @@ Gero Wallet; the contract cannot help) or **Chain** (a property of the ledger).
 | T9 | A fake "your listing": an attacker locks junk at the script with the victim's stake key and `owner` set to the victim | Wallet | A listing is shown as the user's only if `owner` is one of its own keys **and** `seller_address` is one of its own addresses. Anything else is hidden |
 | T10 | Token dust in a listing | Contract, Wallet | The seller and royalty outputs the contract requires are ADA only. The contract does not restrict what a listing UTxO holds, so the wallet shows its full value |
 | T11 | Counterfeit collections | Wallet | The wallet shows the policy id, uses a verified-collection flag, warns on lookalike names and reads royalties only from the policy's own token |
-| T12 | A UTxO sent to the script address with no datum | Contract, Wallet | The validator expects a `Listing` datum, so such a UTxO can be spent by neither action. The wallet never sends to the script without a datum and warns that manual sends are unrecoverable |
+| T12 | A UTxO sent to the script address with no datum, or with a datum that is not a `Listing` | Contract, Wallet | Nothing on chain can stop the send, and neither UTxO can ever be spent: the compiled script decodes the spent UTxO's datum as a `Listing` before any rule runs and requires one, so `Purchase` and `Cancel` both fail ([D1](rules.md#how-the-validator-is-entered)). The NFT and ADA are lost for good. The wallet never creates either and warns that manual sends are unrecoverable |
 | T13 | Two buyers race for one listing | Chain, Wallet | The loser's transaction fails the ledger's first validation phase (input already spent) and loses no collateral. The wallet evaluates the scripts before submitting, so a transaction cannot fail the script phase and cost its collateral |
 | T14 | A malicious dApp spends the user's listing | Contract, Wallet | `Cancel` needs the owner's signature. The wallet's signing preview must show listing inputs owned by the wallet as outgoing assets |
 | T15 | The remote transaction builder is compromised and builds a buy with wrong outputs | Wallet, Contract | The wallet checks the fee, seller and royalty outputs against the indexed datum and the parameters, and the buyer's net outflow. A wrong output also fails the script, which costs the collateral if the transaction is submitted without being evaluated first |
@@ -50,7 +50,8 @@ Gero Wallet; the contract cannot help) or **Chain** (a property of the ledger).
 
 ## Behaviours the review should look at
 
-These are deliberate. Each is pinned by tests so an auditor can see it is not an accident.
+These are deliberate. Each names the tests that pin it (or, for the budget, measure it), so an
+auditor can see it is not an accident.
 
 ### F1. A listing with a datum hash
 
@@ -61,6 +62,13 @@ owner's `Cancel` works. A `Purchase` fails, because the combined fee of
 [rule P3](rules.md#p3-the-combined-fee) decodes the datum of **every** input at the script from its
 inline datum, and a hash is not one. The same failure blocks any purchase in a transaction that
 carries such an input, even when the input is not the one being bought.
+
+Tests: `purchase_hash_datum_listing_fails` (the hash-datum listing is the one bought),
+`purchase_next_to_a_cancelled_hash_datum_listing_fails` (an inline listing bought while a
+hash-datum listing of the same script is cancelled in the same transaction; its control
+`purchase_next_to_a_cancelled_inline_listing_passes` is the same transaction with that listing
+inline), `total_fees_hash_datum_fails` (the fee total itself) and `cancel_hash_datum_listing_passes`
+(the owner can take it back).
 
 **This is a fail-closed behaviour that rests on one place.** No other line of the purchase path
 looks at the datum form of the other inputs. The `fee-covered` clause must therefore keep calling
@@ -80,6 +88,9 @@ covered by it. A royalty smaller than the fee does not cover it (a 1.2 ADA royal
 address with no other fee output is rejected). This follows from the royalty and the fee being one
 payment to one address.
 
+Tests: `fee_address_as_royalty_payee_counts_toward_fee`, `fee_address_as_royalty_payee_below_the_fee_fails`,
+`fee_address_as_seller_counts_toward_fee`.
+
 ### F3. The bulk-buy budget ceiling
 
 Buying N listings in one transaction runs N validators that each walk N inputs, so the cost grows
@@ -93,6 +104,11 @@ cannot be built, and one submitted with a budget that is too small fails the scr
 the collateral. A single purchase is not affected by other people's listings: only the inputs a
 transaction spends are walked.
 
+Measured by: `budget_purchase_n_*` and `budget_baseline_n_*` in `budget.test.ak` (each purchase
+test also asserts the purchase passes), and `scripts/eval-applied.mjs`, which runs the applied
+preprod version 1 script on a single buy with no, one and three royalties
+(`scripts/eval-applied.test.mjs` asserts the units).
+
 ### F4. The tag encoding
 
 The tag is the hash of the output reference's CBOR as Plutus writes it: an **indefinite-length**
@@ -101,6 +117,10 @@ bytes with a one-byte index, or with a definite-length array, makes every purcha
 fail. The vectors for indices 0, 23, 24 and 256 are in `test-vectors/tags.json` and are checked by
 Aiken tests and by a separate JavaScript implementation.
 
+Tests: `serialise_index_0`, `serialise_index_23`, `serialise_index_24`, `serialise_index_256`,
+`tag_index_0`, `tag_index_23`, `tag_index_24`, `tag_index_256`, and `scripts/check-vectors.mjs`
+(tested by `scripts/check-vectors.test.mjs`), which rebuilds the bytes without Aiken.
+
 ### F5. Parameter encoding mistakes
 
 A parameter with a valid shape but a wrong value (a bare integer for `max_fee`, a stake part
@@ -108,6 +128,18 @@ encoded as a pointer, a key hash where a script hash goes) produces a valid scri
 hash, and a script nobody meant to deploy. Each deployment applies the parameters with two
 independent implementations (the Aiken CLI, and Lucid Evolution) and requires the same script hash
 before anything is published. See [deploying.md](deploying.md).
+
+Tests: `catches the parameter encoding mistakes that still give a valid script` in
+`scripts/verify-params.test.mjs`, with the encoding tests of `scripts/apply-params.test.mjs`. CI runs
+`scripts/verify-deployments.mjs`, which repeats the comparison for every committed deployment.
+
+Two implementations cannot catch a mistake in the source itself, because both apply the parameters
+to the same compiled code. A wrapper that passed its parameters on in the wrong order (`fee_bps`
+and `min_fee` swapped, which would charge 5 ADA on every sale) gives the same hash in both. That is
+caught by `validators/listing.test.ak`, which calls the validator's handler with the version 1 terms
+(the swap fails `spend_purchase_pays_everyone`, `spend_purchase_at_300_ada_pays_one_percent` and
+four more), and by `scripts/eval-applied.mjs`, which runs each deployment's applied script and
+expects a 100 ADA purchase with a 1.5 ADA fee to pass.
 
 ## What the contract does not do
 
@@ -124,10 +156,12 @@ These are accepted limits, not oversights.
 - **It cannot be paused, upgraded or patched.** A fix is a new script hash, a new fee address and a
   new deployment. The wallet keeps the old deployment in its list until its listings drain, so
   owners can still cancel and buyers can still buy them.
-- **The datum is decoded by Aiken's generated wrapper** before the rules run. The tests in this
-  repository call the rules directly, and no test presents a malformed datum, redeemer or script
-  context to the compiled script. The compiled script is run only on valid purchases, for the
-  figures in [budget.md](budget.md).
+- **The datum is decoded by Aiken's generated wrapper** before the rules run. The tests in `lib/`
+  call the rules directly. `validators/listing.test.ak` calls the validator's handler with its four
+  parameters, and `scripts/eval-applied.mjs` runs the compiled script of each deployment, its
+  parameters applied, on committed script contexts: purchases that pay and one that does not, a
+  cancel, a UTxO with no datum and one whose datum is the integer 42 (both refused). No test
+  presents a malformed redeemer, or a script context of another shape, to the compiled script.
 
 ## Off-chain rules the contract cannot enforce
 

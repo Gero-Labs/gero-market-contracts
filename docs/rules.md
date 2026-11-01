@@ -19,7 +19,7 @@ it by paying everyone the datum names. There is no administrator, no fee waiver 
 path.
 
 The validator runs only when a listing is **spent**. Nothing checks a listing when it is
-**created**, so a bad datum is accepted on chain and only bites at the first sale. See
+**created**, so a bad datum is accepted on chain and only shows when the listing is spent. See
 [What the contract cannot enforce](#what-the-contract-cannot-enforce).
 
 ## Parameters
@@ -86,11 +86,15 @@ As Plutus data (the full schema is in the `definitions` of `plutus.json`):
 
 ## How the validator is entered
 
-- **D1, a datum is required.** The validator expects the datum of the spent UTxO to be
-  `Some(listing)`. A UTxO at the script with no datum can be spent by neither action. One whose
-  datum is not a valid `Listing` is not a listing: the fee total of P3 decodes the datum of every
-  input at the script and fails on one it cannot decode. Funds sent to the script address that way
-  can be lost for good; the wallet never does it and nobody should do it by hand.
+- **D1, the datum must be a `Listing`.** The compiled script decodes the datum of the spent UTxO
+  as an `Option<Listing>` before any rule runs, and the validator then requires `Some(listing)`.
+  So a UTxO at the script address with **no datum**, and one whose datum is **not a `Listing`**
+  (any other data, the integer 42 for instance), can be spent by neither `Purchase` nor `Cancel`:
+  the first fails the `Some` check, the second fails while its datum is decoded. Both are locked
+  for good, NFT and ADA alike, and nothing on chain can stop someone sending them. The wallet never
+  creates either, and nobody should send to the script address by hand. (A listing whose datum is
+  a hash of a valid `Listing` is a different case: see
+  [Behaviours worth knowing](#behaviours-worth-knowing).)
 - **E1, nothing but spending.** Any other purpose (minting, withdrawing, certificates, voting,
   proposing) reaches the `else` handler, which fails. The script cannot be used for anything but
   holding listings.
@@ -162,7 +166,9 @@ In detail:
   transaction runs N validators that each walk N inputs. The cost grows with the square of N: see
   [budget.md](budget.md).
 - The sum covers only listings of the same script. A transaction that spent listings of two
-  contract versions could pay one fee for both, which is why every version has its own fee address.
+  contract versions, or of two contracts that both charge a fee, could pay one fee for both if
+  they shared a fee address. That is why a fee address belongs to exactly one version of exactly
+  one contract (see T3 in [threat-model.md](threat-model.md)).
 
 Why the fee is summed and not tagged: the fee goes to one address for every listing, so requiring
 the outputs at that address to hold the sum of all the fees is enough to stop one fee being counted

@@ -8,7 +8,8 @@
 //   all [ atLeast 2 of (sig k1, sig k2, sig k3), invalidBefore <N> ]
 //
 // and its stake part is the given stake key. The `invalidBefore` slot is the version number: it
-// gives every contract version its own script hash and address with the same signers (spec 5.9).
+// gives every contract version its own script hash and address with the same signers (see "One
+// fee address per version" in docs/deploying.md).
 // It is a real timelock, not a no-op: a spend from the fee address needs a transaction whose
 // validity interval has a lower bound of at least N (`invalid_before >= N`), and a transaction with
 // no lower bound fails the script. The slot is far in the past, so any lower bound from N up to

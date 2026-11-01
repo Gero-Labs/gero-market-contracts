@@ -98,8 +98,20 @@ Run these from the repository root. Step 4 needs Aiken v1.1.24 (the version that
    ```
 
    It must exit 0. Exit 1 prints both hashes (or the `fee-address.json` mismatch): do not publish,
-   find out which encoding or file is wrong.
-6. **Publish.** Only after step 5: commit the folder, then upload the reference script and lock it
+   find out which encoding or file is wrong. CI runs `verify-deployments.mjs`, which does this for
+   every folder here that holds a `script.json`.
+6. **Run the applied script.** Add the script contexts of this deployment (built with its script
+   hash and fee address in `lib/gero_market/contexts.ak`, pinned in
+   `lib/gero_market/contexts.test.ak`, saved as `test-vectors/contexts/<network>-v<N>/*.hex`; the
+   step is described in [docs/deploying.md](../docs/deploying.md#3-the-parameters)), then:
+
+   ```sh
+   node scripts/eval-applied.mjs
+   ```
+
+   It runs `compiledCode` of every `script.json` on its contexts with Aiken's evaluator and must
+   exit 0. CI runs it too, and fails for a folder with a `script.json` but no contexts.
+7. **Publish.** Only after step 5: commit the folder, then upload the reference script and lock it
    at an always-fail address. `publish-reference.mjs` builds that transaction, unsigned, for a
    preprod address that holds funds. It reads no key, signs nothing, and refuses mainnet:
 
@@ -113,7 +125,7 @@ Run these from the repository root. Step 4 needs Aiken v1.1.24 (the version that
    satisfy, with no datum. The owner of `--from` signs and sends it elsewhere. Then record the script
    hash, the reference script output and the source commit in the wallet's deployment list.
 
-Steps 4 and 5 take `--dir <folder>` to work in another deployments folder than this one.
+Steps 4 to 6 take `--dir <folder>` to work in another deployments folder than this one.
 
 ## Mainnet
 

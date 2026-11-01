@@ -5,8 +5,8 @@ use aiken/math
 /// The fee A.D. Labs is owed for a sale at `price`:
 /// `clamp(min_fee, max_fee, floor(price * fee_bps / 10000))`.
 ///
-/// `/` on non-negative integers rounds down, which is the rounding the spec asks for.
-/// The minimum is applied first and the cap last, so a cap below the minimum (a bad
+/// `/` on non-negative integers rounds down, which is the rounding rule P1 of `docs/rules.md`
+/// asks for. The minimum is applied first and the cap last, so a cap below the minimum (a bad
 /// parameter set the deployment review rejects) would win. With no cap only the minimum applies.
 pub fn listing_fee(
   price: Int,

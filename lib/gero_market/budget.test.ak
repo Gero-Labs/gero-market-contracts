@@ -1,4 +1,5 @@
-//// Execution budget of buying several listings in one transaction (spec 5.4 rule 3, 5.11).
+//// Execution budget of buying several listings in one transaction (the combined fee, rule P3 of
+//// `docs/rules.md`; the figures are in `docs/budget.md`).
 ////
 //// The fee check of every listing walks every listing input of the transaction, so one run of the
 //// validator costs more the more listings are bought together, and the whole transaction costs

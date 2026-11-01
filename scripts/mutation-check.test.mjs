@@ -302,7 +302,7 @@ test('puts the source back when interrupted while a mutant is being judged', asy
   assert.equal(readFileSync(file, 'utf8'), RULES, 'the source is put back');
 });
 
-// ## A tool failure is not a verdict (Ruling R15)
+// ## A tool failure is not a verdict: only a compiling mutant whose tests then fail is killed
 
 const ONE_CLAUSE = 'pub fn m(a: Bool) -> Bool {\n  // mutant:only\n  a\n}\n';
 

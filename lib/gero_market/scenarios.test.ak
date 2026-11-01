@@ -116,7 +116,7 @@ const deposit_b: Int = 3_000_000
 
 const deposit_c: Int = 4_000_000
 
-// ## One fee output for several listings (spec 5.4 rule 3)
+// ## One fee output for several listings (rule P3 of docs/rules.md)
 
 // The buy these tests start from. Listing 0 costs 100 ADA with a 2 ADA royalty to the creator and
 // a 2 ADA deposit: its fee is the 1.5 ADA minimum and the seller is due 100 - 1.5 - 2 + 2 = 98.5
@@ -264,7 +264,7 @@ test three_listings_bought_with_one_fee_output() {
   }
 }
 
-// ## Listings that try to share an output (spec 5.4, "why tagged")
+// ## Listings that try to share an output (rule P4 of docs/rules.md: why the outputs are tagged)
 
 test two_listings_cannot_share_one_seller_output() {
   // Both sellers are the same address, so one output of 100.5 + 101.5 = 202 ADA looks like it
@@ -455,7 +455,7 @@ test listing_of_another_script_is_not_counted_toward_the_fee() {
   accepted(verdicts(inputs, [bought(0, 1)], outputs, []), 1)
 }
 
-// ## The fee address named by the listing (Review Focus 3)
+// ## The fee address named by the listing (F2 in docs/threat-model.md)
 
 test fee_address_as_royalty_payee_counts_toward_fee() {
   // The creator's royalty is paid to the fee address, and 2 ADA >= the 1.5 ADA fee, so no

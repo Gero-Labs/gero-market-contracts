@@ -40,7 +40,7 @@ export const NETWORKS = {
  */
 export const MAX_VERSION = 1_000_000;
 
-/** The deployment review's limit on `fee_bps` (spec 5.2); the contract itself allows below 10000. */
+/** The deployment review's limit on `fee_bps` (Parameters in docs/rules.md); the contract itself allows below 10000. */
 export const MAX_REVIEWED_FEE_BPS = 1000;
 
 /** Bad input, or a tool that could not run: exit 2. */

@@ -14,9 +14,17 @@ sends a transaction, holds a key, or touches mainnet today.
   different fee, fee address or contract fix is a new version, a new folder and a new script hash.
   The one file added to a folder after it is committed is its `deployment.json`; no existing file
   changes. `apply-params.mjs` refuses a folder that already holds `plutus.json` or `script.json`.
-- **One fee address per version.** The version number is the `invalidBefore` slot of the fee
-  address's native script, so two versions never share a fee address even with the same three
-  signers. The tools refuse a fee record that does not match its version.
+- **One fee address per version of one contract.** A fee address is used by exactly one version
+  of exactly one contract. Otherwise one transaction could spend listings of both and pay one fee
+  for the two, because each contract sums only its own listings' fees and counts every output at
+  its fee address. The version number is the `invalidBefore` slot of the fee address's native
+  script, so two versions of this contract never share a fee address even with the same three
+  signers, and the tools refuse a fee record that does not match its version. Nothing tells two
+  **contracts** apart yet: `fee-address.mjs` derives the address from the signers and the version
+  number alone, so a second contract that charges a fee, derived with the same signers and the
+  same number, would get the same address. Before a second fee-charging contract exists, add a
+  per-contract discriminator to its fee address (for example another script in the `all` list,
+  or another set of signers) and make the tools check it.
 - **Key hashes only.** No key of any kind is kept in this repository, and the tools hold none. Each
   script that needs a signature writes an unsigned transaction and leaves the signing to a wallet.
 - **Deploy the audited commit.** The script hash is a function of the source. Build from the commit
@@ -36,8 +44,11 @@ fee address  ->  params.json  ->  apply-params  ->  verify-params  ->  publish-r
 
 ## Preprod version 1 is the dress rehearsal
 
-`deployments/preprod-v1/` holds a complete preprod deployment made with test keys that live outside
-this repository:
+`deployments/preprod-v1/` holds the preprod version 1 deployment, made with test keys that live
+outside this repository. Its parameters are applied (`apply-params.mjs`) and verified
+(`verify-params.mjs`, and on every CI run `verify-deployments.mjs` and `eval-applied.mjs`), but it
+is **not yet published on chain**: no reference-script transaction has been signed or sent, and the
+folder has no `deployment.json`.
 
 | Item | Value |
 |---|---|
@@ -62,7 +73,8 @@ preprod keys on mainnet: they were generated on a development machine.
 - [ ] Work from a clean clone of the commit to deploy, on a machine you trust, with Aiken v1.1.24
   first on `PATH` (the version that built `plutus.json`; never switch the default with `aikup`).
 - [ ] `npm ci`, `npm run check`, `npm test`, `node scripts/forbidden-words.mjs`,
-  `node scripts/check-vectors.mjs` and `node scripts/mutation-check.mjs` all pass.
+  `node scripts/check-vectors.mjs`, `node scripts/verify-deployments.mjs`,
+  `node scripts/eval-applied.mjs` and `node scripts/mutation-check.mjs` all pass.
 - [ ] `aiken build` leaves `plutus.json` unchanged (`git diff --exit-code plutus.json`). The
   repository's `plutus.json` is the input of every deployment, and the build has no traces. Never
   deploy a build with traces.
@@ -137,11 +149,30 @@ preprod keys on mainnet: they were generated on a development machine.
   It must exit 0. Exit 1 prints both hashes (or the fee-record mismatch): do not go on. A
   parameter that has a valid shape and a wrong value gives a valid script with another hash, and this
   check is what catches it.
-- [ ] Publish a UPLC verification of the script (as for the CIP-113 deployments, for example on
-  uplc.link) so that anyone can compare the deployed script with the blueprint. Keep the link, or a
-  note of how the check was done: it is recorded in `uplcVerification` of `deployment.json` (step 6).
-- [ ] Commit the folder (`fee-address.json`, `params.json`, `plutus.json`, `script.json`) in a pull
-  request with two approvals. From here on the folder is never edited. Nothing has been signed or sent.
+- [ ] Run the applied script itself. Add the script contexts of the new deployment, built with its
+  own values: a `Deployment` constant in `lib/gero_market/contexts.ak` holding the script hash of
+  `script.json` and the fee address of `params.json`; one pin test per context in
+  `lib/gero_market/contexts.test.ak`, named `<network>_v<N>_<context>` (for example
+  `mainnet_v1_purchase_ok`); and the files `test-vectors/contexts/<network>-v<N>/<context>.hex`. The
+  header of `contexts.test.ak` says how to get the bytes. The contexts are written for the version 1
+  terms; a version with other terms needs its amounts changed first. Then
+
+  ```sh
+  node scripts/eval-applied.mjs
+  ```
+
+  must exit 0. It refuses a context that is not tied to the deployment (its listing at the
+  deployment's script hash, its fee output at the deployment's fee address) or not pinned, runs
+  `compiledCode` of `script.json` on each context with Aiken's evaluator, and requires each verdict
+  it lists (the correct purchases and the cancel pass; the purchase one lovelace short of the fee,
+  the UTxO with no datum and the one with a datum that is not a `Listing` fail). CI runs it, and
+  fails for a committed deployment folder that has no contexts.
+- [ ] Publish a UPLC verification of the script (for example on uplc.link) so that anyone can
+  compare the deployed script with the blueprint. Keep the link, or a note of how the check was
+  done: it is recorded in `uplcVerification` of `deployment.json` (step 6).
+- [ ] Commit the folder (`fee-address.json`, `params.json`, `plutus.json`, `script.json`), together
+  with its script contexts, in a pull request with two approvals. From here on the folder is never
+  edited. Nothing has been signed or sent.
 
 ### 4. The reference-script transaction
 
@@ -228,9 +259,11 @@ mainnet publish therefore needs a reviewed change to that script first.
 - [ ] Two people compare every field of `deployment.json` with the chain and with the rest of the
   folder (hash, output reference and address, fee address and native script, parameters, versions,
   commit, verification) before it is committed.
-- [ ] Only then does Gero Wallet add the deployment to its list, held to the review bar of the
-  CIP-113 deployments. New listings go to the newest deployment, and older ones stay in the list until
-  their listings drain.
+- [ ] Only then does Gero Wallet add the deployment to its list. That list is reviewed code, not
+  configuration: each entry names the script hash, the reference script's output reference, the fee
+  address, the parameters and the source commit, all equal to `deployment.json`, and two people
+  review the entry against the chain before it is merged. New listings go to the newest deployment,
+  and older ones stay in the list until their listings drain.
 
 ### 7. Before the wallet turns it on
 
