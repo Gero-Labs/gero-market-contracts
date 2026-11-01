@@ -109,12 +109,18 @@ node scripts/mutation-check.mjs    # replaces each marked clause with True; a te
 `aiken build` writes the blueprint to `plutus.json`. The toolchain is pinned in `aiken.toml`:
 compiler v1.1.24, Plutus V3, standard library v4.0.0 and fuzz v3.0.0.
 
+JavaScript dependencies are exact versions, each at least 14 days old when it was added. The
+`overrides` in `package.json` pin three packages that Lucid Evolution pulls in with open version
+ranges (`effect`, `multipasta`, `cbor-x`), so that `npm install` cannot float past that rule.
+Change them together with the dependency that needs them.
+
 ## Deployments
 
-Every deployment is recorded under `deployments/`, which is added with the first deployment: the
-script hash, the parameter values, the reference script's output reference and the source commit.
-A different fee, fee address or contract fix is a new deployment with a new script hash. Older
-deployments stay listed so that their listings can still be cancelled and bought.
+Every deployment is recorded under `deployments/` (the procedure is in
+[deployments/README.md](deployments/README.md)): the script hash, the parameter values, the
+reference script's output reference and the source commit. A different fee, fee address or contract
+fix is a new deployment with a new script hash. Older deployments stay listed so that their
+listings can still be cancelled and bought.
 
 ## License
 

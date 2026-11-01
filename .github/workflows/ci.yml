@@ -28,6 +28,10 @@ jobs:
         run: node scripts/check-vectors.mjs
       - name: Check (fmt, check, build)
         run: npm run check
+      - name: Blueprint matches the source
+        run: |
+          aiken build
+          git diff --exit-code plutus.json
       - name: Test
         run: npm test
       - name: Mutation check

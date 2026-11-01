@@ -10,6 +10,12 @@
     "check": "aiken fmt --check && aiken check -D && aiken build -D"
   },
   "devDependencies": {
+    "@lucid-evolution/lucid": "0.8.1",
     "@noble/hashes": "2.4.0"
+  },
+  "overrides": {
+    "effect": "3.22.3",
+    "multipasta": "0.2.8",
+    "cbor-x": "1.6.6"
   }
 }
