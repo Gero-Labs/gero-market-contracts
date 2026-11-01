@@ -78,10 +78,23 @@ script is built by `aiken build`, which has no traces. Never deploy a build with
 in code that reads the datum, the redeemer and the script context. To include that wrapper, the
 script in `plutus.json` was also run with `aiken uplc eval` on the same transactions (the script
 context of each transaction serialised with `cbor.serialise`, the four parameters applied: the fee
-address, 100, 1,500,000 and `Some(5,000,000)`), once for every listing of each transaction. This
-cross-check is not part of the test suite. It costs 40,000 to 48,000 memory units and 12 to 14
-million CPU steps more per run than the tests show. **The compiled-script figures are the ones to
-plan with.**
+address, 100, 1,500,000 and `Some(5,000,000)`), once for every listing of each transaction. It costs
+40,000 to 48,000 memory units and 12 to 14 million CPU steps more per run than the tests show.
+**The compiled-script figures are the ones to plan with.**
+
+The single-buy figures are reproduced on every CI run by `scripts/eval-applied.mjs`, which runs the
+applied preprod version 1 script (`deployments/preprod-v1/script.json`) on the committed script
+contexts in `test-vectors/contexts/preprod-v1/` and prints the units of each one that passes.
+`purchase_no_royalty`, `purchase_ok` and `purchase_three_royalties` are the single buy of
+`budget.test.ak` (same transaction shape, built by `lib/gero_market/contexts.ak` with the
+deployment's own fee address and script hash) and give exactly the figures of
+[the table below](#the-cost-of-a-single-buy-for-the-builder); `scripts/eval-applied.test.mjs`
+asserts them. The figures for several listings were measured the same way, with contexts that are
+not committed:
+
+```
+node scripts/eval-applied.mjs    # Aiken v1.1.24 first on PATH
+```
 
 ## Results with one royalty per listing
 
@@ -157,7 +170,9 @@ listings with different numbers of royalties lies between the two ceilings.
 
 ## The cost of a single buy (for the builder)
 
-From the compiled script, one listing in the transaction (100 ADA, one wallet UTxO):
+From the compiled script, one listing in the transaction (100 ADA, one wallet UTxO). These three rows
+are what `node scripts/eval-applied.mjs` prints for `purchase_no_royalty`, `purchase_ok` and
+`purchase_three_royalties` on the preprod version 1 script:
 
 | Royalties | Memory | CPU | % of memory limit | % of CPU limit | Execution fee |
 |---|---|---|---|---|---|

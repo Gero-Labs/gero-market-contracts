@@ -7,7 +7,7 @@
 // Nothing here builds the Plutus data of the contract parameters. apply-params.mjs and
 // verify-params.mjs each do that on their own, so that they stay two separate implementations.
 
-import { lstatSync, readFileSync } from 'node:fs';
+import { lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -151,6 +151,34 @@ export function deploymentPaths(dir, network, version) {
     plutus: join(folder, 'plutus.json'),
     script: join(folder, 'script.json'),
   };
+}
+
+/**
+ * The deployment folders of `dir` that hold a `script.json` (the applied ones), sorted by name, as
+ * `{ name, network, version, folder }`. A folder without `script.json` (a deployment still being
+ * prepared) is left out. A folder with one whose name is not `<network>-v<version>` is bad input.
+ */
+export function listDeployments(dir) {
+  const base = resolve(dir);
+  let entries;
+  try {
+    entries = readdirSync(base, { withFileTypes: true });
+  } catch (error) {
+    throw new UsageError(`cannot read the deployments folder ${base}: ${error.message}`);
+  }
+  const found = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entryExists(join(base, entry.name, 'script.json'))) continue;
+    const match = /^([a-z]+)-v([0-9]+)$/.exec(entry.name);
+    if (match === null) {
+      throw new UsageError(`${join(base, entry.name)} holds a script.json but is not named <network>-v<version>`);
+    }
+    const network = parseNetwork(match[1]);
+    const version = parseVersion(match[2]);
+    found.push({ name: entry.name, network, version, folder: join(base, entry.name) });
+  }
+  if (found.length === 0) throw new UsageError(`no deployment folder with a script.json in ${base}`);
+  return found.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
 /** script.json: `{ scriptHash, compiledCode }`, both checked for their shape (not for being the same script). */
