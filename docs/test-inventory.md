@@ -20,9 +20,9 @@ node scripts/eval-applied.mjs      # every deployment's applied script on its sc
 node scripts/mutation-check.mjs    # the mutation check below
 ```
 
-CI runs all of them. On the commit measured below, `aiken check` reports 759 checks and 0 errors:
-165 Aiken tests, of which 6 are property tests that run 100 times each (159 + 6 x 100). The scripts
-have 142 tests (`npm test`). Test modules, all in `lib/gero_market/` unless stated:
+CI runs all of them. On the commit measured below, `aiken check` reports 762 checks and 0 errors:
+168 Aiken tests, of which 6 are property tests that run 100 times each (162 + 6 x 100). The scripts
+have 143 tests (`npm test`). Test modules, all in `lib/gero_market/` unless stated:
 
 | Module | Tests | What it holds |
 |---|---|---|
@@ -32,7 +32,7 @@ have 142 tests (`npm test`). Test modules, all in `lib/gero_market/` unless stat
 | `spend.test.ak` | 42 | `Purchase` and `Cancel` of one listing, each failing case breaking exactly one thing (one breaks two on purpose: T5) |
 | `scenarios.test.ak` | 28 | several listings in one transaction, and 4 properties over random listings |
 | `budget.test.ak` | 21 | execution-budget measurements (see [budget.md](budget.md)); each also asserts the purchase passes |
-| `contexts.test.ak` | 7 | pins the bytes of the script contexts in `test-vectors/contexts/` |
+| `contexts.test.ak` | 10 | pins the bytes of the script contexts in `test-vectors/contexts/` |
 | `smoke.test.ak` | 1 | the toolchain runs |
 | `validators/listing.ak` | 1 | `else_fails` |
 | `validators/listing.test.ak` | 14 | the validator's entry point, `listing.spend`, with its four parameters |
@@ -172,23 +172,36 @@ output on preprod version 1:
 ```
 deployment | context                  | expected | verdict | memory  | cpu         | error
 -----------+--------------------------+----------+---------+---------+-------------+----------------------------------------------------
-preprod-v1 | purchase_ok              | success  | success | 298,562 | 119,908,574 |
-preprod-v1 | purchase_no_royalty      | success  | success | 223,756 | 90,225,409  |
-preprod-v1 | purchase_three_royalties | success  | success | 448,174 | 179,274,904 |
-preprod-v1 | purchase_fee_short       | failure  | failure | -       | -           | the validator crashed / exited prematurely
-preprod-v1 | cancel_ok                | success  | success | 32,417  | 9,436,911   |
-preprod-v1 | cancel_no_datum          | failure  | failure | -       | -           | the validator crashed / exited prematurely
-preprod-v1 | cancel_bad_datum         | failure  | failure | -       | -           | failed to deserialise PlutusData using UnConstrData
+preprod-v1 | purchase_ok                  | success  | success | 298,562 | 119,908,574 |
+preprod-v1 | purchase_no_royalty          | success  | success | 223,756 | 90,225,409  |
+preprod-v1 | purchase_three_royalties     | success  | success | 448,174 | 179,274,904 |
+preprod-v1 | purchase_fee_short           | failure  | failure | -       | -           | the validator crashed / exited prematurely
+preprod-v1 | cancel_ok                    | success  | success | 32,417  | 9,436,911   |
+preprod-v1 | cancel_no_datum              | failure  | failure | -       | -           | the validator crashed / exited prematurely
+preprod-v1 | cancel_bad_datum             | failure  | failure | -       | -           | failed to deserialise PlutusData using UnConstrData
+preprod-v1 | cancel_constr_datum          | success  | success | 32,417  | 9,436,911   |
+preprod-v1 | cancel_constr_datum_unsigned | failure  | failure | -       | -           | the validator crashed / exited prematurely
+preprod-v1 | purchase_constr_datum        | failure  | failure | -       | -           | the validator crashed / exited prematurely
 
-7 contexts on 1 deployment: 7 as expected, 0 unexpected
+10 contexts on 1 deployment: 10 as expected, 0 unexpected
 ```
 
 The deployed script is built without traces, so a failure carries no message of its own; the
-`cancel_bad_datum` one comes from the evaluator, which fails while decoding the datum, before any rule
-runs. The purchases are the single buy of [budget.md](budget.md), and their units are the figures
-there. A preprod version 1 script rebuilt from the swapped wrapper (checked by hand, not in CI) fails
-`purchase_ok`, `purchase_no_royalty` and `purchase_three_royalties`, and the script exits 1.
-`scripts/eval-applied.test.mjs` tests the script itself.
+`cancel_bad_datum` one comes from the evaluator: a cancel reads the owner from field 0 of the datum,
+and an integer has no fields. The purchases are the single buy of [budget.md](budget.md), and their
+units are the figures there. A preprod version 1 script rebuilt from the swapped wrapper (checked by
+hand, not in CI) fails `purchase_ok`, `purchase_no_royalty` and `purchase_three_royalties`, and the
+script exits 1. `scripts/eval-applied.test.mjs` tests the script itself.
+
+The three `*_constr_datum` contexts show how the compiled script treats a datum that is a constructor
+but not a `Listing`: here a `Listing` with a sixth field, which Aiken's typed tests cannot build, so
+the contexts carry it as raw data. A signed cancel by the key in field 0 passes, at exactly the units
+of `cancel_ok` (it reads only that key); the same cancel without the signature fails; and the
+purchase of that UTxO, the transaction of `purchase_ok` otherwise, fails. The deployed script is
+pinned as it is, not as it might be: see
+[F6 of the threat model](threat-model.md#f6-a-datum-that-is-a-constructor-but-not-a-listing). Their
+pin tests are `preprod_v1_cancel_constr_datum`, `preprod_v1_cancel_constr_datum_unsigned` and
+`preprod_v1_purchase_constr_datum` in `contexts.test.ak`.
 
 ## Rules to tests
 
@@ -196,12 +209,17 @@ Rule identifiers are those of [rules.md](rules.md).
 
 ### D1. The datum must be a `Listing`
 
-- Mutants: none. It is an `expect` and the wrapper's decoding, not a clause.
+- Mutants: none. It is an `expect` and the wrapper's reading of the datum, not a clause.
 - Tests: `purchase_datum_none_fails`, `cancel_datum_none_fails`, and through the handler
   `spend_datum_none_fails`.
-- The applied script: `cancel_no_datum` (a UTxO with no datum) and `cancel_bad_datum` (an inline datum
-  that is the integer 42) must fail in `scripts/eval-applied.mjs`. Both are signed cancels by the
-  owner, so the datum is the only thing wrong with them.
+- The applied script, in `scripts/eval-applied.mjs`: `cancel_no_datum` (a UTxO with no datum) and
+  `cancel_bad_datum` (an inline datum that is the integer 42) must fail. Both are signed cancels by
+  the owner, so the datum is the only thing wrong with them. A datum that is a constructor but not a
+  `Listing` (`cancel_constr_datum`, `cancel_constr_datum_unsigned`, `purchase_constr_datum`) is
+  cancelled by the key in its field 0 and never bought.
+- Open question for the audit: should a malformed datum be rejected on `Cancel` too? Today only a
+  datum with no readable owner is out of reach of `Cancel`
+  ([F6](threat-model.md#f6-a-datum-that-is-a-constructor-but-not-a-listing)).
 
 ### P1. The fee
 
@@ -312,8 +330,9 @@ Rule identifiers are those of [rules.md](rules.md).
   `cancel_private_listing_by_its_owner_passes`, `cancel_hash_datum_listing_passes`,
   `cancel_datum_none_fails`, `cancel_with_the_buyers_utxo_first_passes`; through the handler
   `spend_cancel_signed_by_owner_passes` and `spend_cancel_unsigned_fails`; on the applied script,
-  `cancel_ok` in `scripts/eval-applied.mjs`. The no-output-rules part is shown by every cancel test
-  passing with no outputs at all.
+  `cancel_ok` and `cancel_constr_datum` (a datum that is not a complete `Listing`, cancelled by the
+  key in its field 0, because a cancel reads only the owner) in `scripts/eval-applied.mjs`. The
+  no-output-rules part is shown by every cancel test passing with no outputs at all.
 
 ### E1. Nothing but spending
 
@@ -346,7 +365,7 @@ mitigation lives in the wallet or on the chain.
 | T9 | Not testable here |
 | T10 | Mutant `pays-ada-only`. `pays_extra_token_fails`, `purchase_seller_with_token_fails` |
 | T11 | Not testable here |
-| T12 | `purchase_datum_none_fails`, `cancel_datum_none_fails`, `spend_datum_none_fails`, `total_fees_no_datum_fails`, `total_fees_foreign_inline_datum_fails`; on the applied script, `cancel_no_datum` and `cancel_bad_datum` in `scripts/eval-applied.mjs` (an owner's signed cancel of either fails) |
+| T12 | `purchase_datum_none_fails`, `cancel_datum_none_fails`, `spend_datum_none_fails`, `total_fees_no_datum_fails`, `total_fees_foreign_inline_datum_fails`; on the applied script, in `scripts/eval-applied.mjs`: `cancel_no_datum` and `cancel_bad_datum` (an owner's signed cancel of either fails), and `cancel_constr_datum`, `cancel_constr_datum_unsigned` and `purchase_constr_datum` (a datum that is a constructor but not a `Listing`: the owner's signed cancel passes, the unsigned one and the purchase fail) |
 | T13 | Not testable here (a property of the ledger and the wallet) |
 | T14 | Mutant `cancel-owner-signed`. `cancel_unsigned_fails`, `cancel_signed_by_buyer_only_fails`, `cancel_signed_by_stranger_only_fails`, `spend_cancel_unsigned_fails` |
 | T15 | Every negative `purchase_*` test, and the mutants `fee-covered`, `seller-paid`, `royalties-paid`. The wallet's check of the builder's output is not testable here |
@@ -367,11 +386,12 @@ it fails that test, `second_sellers_deposit_cannot_be_replaced_by_the_first`,
 | Listing with a datum hash | `purchase_hash_datum_listing_fails`, `purchase_next_to_a_cancelled_hash_datum_listing_fails`, `cancel_hash_datum_listing_passes`, `total_fees_hash_datum_fails` |
 | Fee address as royalty payee or seller | `fee_address_as_royalty_payee_counts_toward_fee`, `fee_address_as_royalty_payee_below_the_fee_fails`, `fee_address_as_seller_counts_toward_fee` |
 | Budget of several listings | `budget_purchase_n_*` and `budget_baseline_n_*` in `budget.test.ak`; the figures and ceilings are in [budget.md](budget.md) |
+| Datum that is a constructor but not a `Listing` | `cancel_constr_datum`, `cancel_constr_datum_unsigned`, `purchase_constr_datum` in `scripts/eval-applied.mjs`; strict rejection is an open question for the audit ([F6](threat-model.md#f6-a-datum-that-is-a-constructor-but-not-a-listing)) |
 | Parameter encoding | `scripts/apply-params.test.mjs` and `scripts/verify-params.test.mjs` (two independent implementations must give the same script hash); `scripts/verify-deployments.mjs` on every committed deployment; `validators/listing.test.ak` and `scripts/eval-applied.mjs` for the order in which the validator passes its parameters on |
 
 ## Tests of the tooling
 
-`npm test` runs 142 tests of the scripts. They are not rules of the contract, but the deployment
+`npm test` runs 143 tests of the scripts. They are not rules of the contract, but the deployment
 depends on them:
 
 | File | What it covers |
@@ -387,10 +407,18 @@ depends on them:
 
 ## What the tests do not cover
 
-- **More of the compiled wrapper.** The applied script runs on seven script contexts, among them a
-  missing datum and a datum that is not a `Listing`. No context carries a malformed redeemer, or a
-  script context of another shape (another purpose reaches `else`, which `else_fails` tests as a
-  function only).
+- **More of the compiled wrapper.** The applied script runs on ten script contexts, among them a
+  missing datum, a datum that is the integer 42 and a `Listing` with a sixth field. Only that one
+  malformed constructor is pinned; the other wrong shapes (another constructor index, a price that
+  is bytes, a buyer that is an integer, the owner field alone) were tried by hand on the preprod
+  version 1 script and behave the same, but no context holds them. No context carries a malformed
+  redeemer, or a script context of another shape (another purpose reaches `else`, which `else_fails`
+  tests as a function only).
+- **Strict rejection of malformed datums.** The tests pin what the deployed script does: a datum that
+  is a constructor but not a `Listing` can be cancelled by the key in its field 0 and never bought.
+  Whether the contract should reject such a datum on `Cancel` as well is an open question for the
+  audit ([F6](threat-model.md#f6-a-datum-that-is-a-constructor-but-not-a-listing)); no test asserts
+  either answer beyond the current behaviour.
 - **The budget of several listings on the applied script.** Only the single buy is re-run in CI; the
   figures for several listings in [budget.md](budget.md) were measured once, by hand.
 - **Reference inputs and the reference-script field of outputs.** The rules do not look at either, and

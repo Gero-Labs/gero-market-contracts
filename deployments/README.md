@@ -61,8 +61,9 @@ and the current slot is the natural choice. Two of the three signers must also s
 
 ## Procedure
 
-Run these from the repository root. Step 4 needs Aiken v1.1.24 (the version that built
-`plutus.json`) first on `PATH`; the other steps only need Node.
+Run these from the repository root. Steps 4 and 6 need Aiken v1.1.24 (the version that built
+`plutus.json`) first on `PATH`, and step 6 also runs `aiken check` to make the context pins; the
+other steps only need Node.
 
 1. **Pick the network and the version.** The version is the next unused whole number for that
    network. It becomes the `invalidBefore` slot of the fee address, so two versions never share a
@@ -111,7 +112,7 @@ Run these from the repository root. Step 4 needs Aiken v1.1.24 (the version that
 
    It runs `compiledCode` of every `script.json` on its contexts with Aiken's evaluator and must
    exit 0. CI runs it too, and fails for a folder with a `script.json` but no contexts.
-7. **Publish.** Only after step 5: commit the folder, then upload the reference script and lock it
+7. **Publish.** Only after step 6: commit the folder, then upload the reference script and lock it
    at an always-fail address. `publish-reference.mjs` builds that transaction, unsigned, for a
    preprod address that holds funds. It reads no key, signs nothing, and refuses mainnet:
 

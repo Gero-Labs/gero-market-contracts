@@ -86,15 +86,26 @@ As Plutus data (the full schema is in the `definitions` of `plutus.json`):
 
 ## How the validator is entered
 
-- **D1, the datum must be a `Listing`.** The compiled script decodes the datum of the spent UTxO
-  as an `Option<Listing>` before any rule runs, and the validator then requires `Some(listing)`.
-  So a UTxO at the script address with **no datum**, and one whose datum is **not a `Listing`**
-  (any other data, the integer 42 for instance), can be spent by neither `Purchase` nor `Cancel`:
-  the first fails the `Some` check, the second fails while its datum is decoded. Both are locked
-  for good, NFT and ADA alike, and nothing on chain can stop someone sending them. The wallet never
-  creates either, and nobody should send to the script address by hand. (A listing whose datum is
-  a hash of a valid `Listing` is a different case: see
-  [Behaviours worth knowing](#behaviours-worth-knowing).)
+- **D1, the datum must be a `Listing`.** The validator requires a datum (`Some(listing)`). Past
+  that, the compiled script reads the datum **field by field, only as far as a rule needs**: a
+  `Cancel` reads one field, the owner (field 0), and a `Purchase` checks, through the fee total
+  ([P3](#p3-the-combined-fee)), that every input at the script is a complete inline `Listing`.
+  So a UTxO at the script address that is not a well-formed listing behaves like this:
+  - **A constructor datum of the wrong shape** (for example a `Listing` with a sixth field, another
+    constructor index, a price that is bytes, a buyer that is an integer, or only the owner field):
+    `Purchase` always fails, and `Cancel` succeeds when the key in field 0 signs. It can never be
+    bought, and whoever holds that key can take the NFT and the ADA back.
+  - **A datum with no readable owner:** not a constructor at all (the integer 42, a list), or a
+    constructor whose field 0 is missing or not a byte string. `Cancel` cannot read an owner and
+    fails too. Nothing can move the UTxO.
+  - **No datum:** the `Some` check fails for both actions. Nothing can move the UTxO.
+
+  The last two are locked for good, NFT and ADA alike. Nothing on chain can stop someone sending
+  any of these to the script address. The wallet must never create one, and nobody should send to
+  the script address by hand. (A listing whose datum is a hash of a valid `Listing` is a different
+  case: see [Behaviours worth knowing](#behaviours-worth-knowing).) Whether the contract should
+  instead reject every malformed datum on `Cancel` too is an open question for the audit: see
+  [F6 of the threat model](threat-model.md#f6-a-datum-that-is-a-constructor-but-not-a-listing).
 - **E1, nothing but spending.** Any other purpose (minting, withdrawing, certificates, voting,
   proposing) reaches the `else` handler, which fails. The script cannot be used for anything but
   holding listings.
@@ -234,6 +245,7 @@ requires only that the payees above are paid.
 `Cancel` needs the owner's key hash (`l.owner`) among the required signers, and nothing else. There
 are no output rules, so the same transaction can send the NFT anywhere or list it again at a new
 price (a reprice). Being the designated `buyer` of a private listing gives no right to cancel it.
+Of the datum it reads only `owner`, so a datum of the wrong shape does not stop it (see D1).
 
 ## G1. The tag
 
@@ -314,6 +326,9 @@ each of them that can be tested.
   from the transaction's witness set and hands the validator the datum value, so the owner's
   `Cancel` works when the datum is supplied. A `Purchase` fails because the fee total expects every
   input at the script to carry an inline datum.
+- **A datum of the wrong shape can be cancelled and never bought.** `Cancel` reads only the owner
+  (field 0) from the datum, so a constructor datum that is not a complete `Listing` but has the
+  owner's key hash first can be cancelled by that key. A `Purchase` fails. See D1 above.
 - **A negative `first_output` behaves as 0.** It cannot help a buyer: whichever outputs it selects
   must still pay the seller and the royalties in full, tagged for this listing.
 - **Outputs after the last royalty are ignored.** The NFT delivery and the buyer's change usually

@@ -22,9 +22,10 @@ A buyer then spends the listing and pays what the rules below ask for. Or the ow
 
 The contract runs only when a listing is spent. It cannot check a listing when it is created, so
 Gero Wallet verifies the datum against what the seller chose before it asks for a signature.
-Funds sent to the script address with no datum, or with a datum that is not a listing, are locked
-for good: neither the owner nor a buyer can ever spend them. The wallet never does this, and nobody
-should do it by hand.
+Funds sent to the script address with no datum, or with a datum that is not a listing, can never be
+bought. If the datum is a constructor whose first field is a key hash, that key can still cancel and
+take the funds back; with no datum, or a datum that is not a constructor (an integer, for example),
+nobody can ever spend them. The wallet never does this, and nobody should do it by hand.
 
 ## Fee terms (version 1)
 

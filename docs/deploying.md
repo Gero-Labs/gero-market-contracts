@@ -164,9 +164,11 @@ preprod keys on mainnet: they were generated on a development machine.
   must exit 0. It refuses a context that is not tied to the deployment (its listing at the
   deployment's script hash, its fee output at the deployment's fee address) or not pinned, runs
   `compiledCode` of `script.json` on each context with Aiken's evaluator, and requires each verdict
-  it lists (the correct purchases and the cancel pass; the purchase one lovelace short of the fee,
-  the UTxO with no datum and the one with a datum that is not a `Listing` fail). CI runs it, and
-  fails for a committed deployment folder that has no contexts.
+  it lists. The correct purchases and the owner's cancel pass. The purchase one lovelace short of
+  the fee fails, and so do the cancels of a UTxO with no datum and of one whose datum is the integer
+  42. A datum of the wrong shape, here a `Listing` with a sixth field, is never bought; its owner's
+  signed cancel passes and the unsigned one fails. CI runs it, and fails for a committed
+  deployment folder that has no contexts.
 - [ ] Publish a UPLC verification of the script (for example on uplc.link) so that anyone can
   compare the deployed script with the blueprint. Keep the link, or a note of how the check was
   done: it is recorded in `uplcVerification` of `deployment.json` (step 6).

@@ -89,8 +89,9 @@ contexts in `test-vectors/contexts/preprod-v1/` and prints the units of each one
 `budget.test.ak` (same transaction shape, built by `lib/gero_market/contexts.ak` with the
 deployment's own fee address and script hash) and give exactly the figures of
 [the table below](#the-cost-of-a-single-buy-for-the-builder); `scripts/eval-applied.test.mjs`
-asserts them. The figures for several listings were measured the same way, with contexts that are
-not committed:
+asserts them. The figures for several listings were measured the same way, once and by hand, with
+contexts that are not committed; the script runs only the committed contexts, which are all single
+buys, so it does not measure them again. To reproduce the single-buy figures:
 
 ```
 node scripts/eval-applied.mjs    # Aiken v1.1.24 first on PATH

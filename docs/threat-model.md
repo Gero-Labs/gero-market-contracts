@@ -42,7 +42,7 @@ Gero Wallet; the contract cannot help) or **Chain** (a property of the ledger).
 | T9 | A fake "your listing": an attacker locks junk at the script with the victim's stake key and `owner` set to the victim | Wallet | A listing is shown as the user's only if `owner` is one of its own keys **and** `seller_address` is one of its own addresses. Anything else is hidden |
 | T10 | Token dust in a listing | Contract, Wallet | The seller and royalty outputs the contract requires are ADA only. The contract does not restrict what a listing UTxO holds, so the wallet shows its full value |
 | T11 | Counterfeit collections | Wallet | The wallet shows the policy id, uses a verified-collection flag, warns on lookalike names and reads royalties only from the policy's own token |
-| T12 | A UTxO sent to the script address with no datum, or with a datum that is not a `Listing` | Contract, Wallet | Nothing on chain can stop the send, and neither UTxO can ever be spent: the compiled script decodes the spent UTxO's datum as a `Listing` before any rule runs and requires one, so `Purchase` and `Cancel` both fail ([D1](rules.md#how-the-validator-is-entered)). The NFT and ADA are lost for good. The wallet never creates either and warns that manual sends are unrecoverable |
+| T12 | A UTxO sent to the script address with no datum, or with a datum that is not a `Listing` | Contract, Wallet | Nothing on chain can stop the send. None of these can be bought: a `Purchase` needs a complete inline `Listing`. Whether a `Cancel` works depends on the datum ([D1](rules.md#how-the-validator-is-entered), [F6](#f6-a-datum-that-is-a-constructor-but-not-a-listing)). With a constructor of the wrong shape, the key in its field 0 can cancel it. With no datum, or a datum that is not a constructor (an integer, a list), nobody can move it and the NFT and ADA are lost for good. The wallet never creates any of these and warns that manual sends can be unrecoverable |
 | T13 | Two buyers race for one listing | Chain, Wallet | The loser's transaction fails the ledger's first validation phase (input already spent) and loses no collateral. The wallet evaluates the scripts before submitting, so a transaction cannot fail the script phase and cost its collateral |
 | T14 | A malicious dApp spends the user's listing | Contract, Wallet | `Cancel` needs the owner's signature. The wallet's signing preview must show listing inputs owned by the wallet as outgoing assets |
 | T15 | The remote transaction builder is compromised and builds a buy with wrong outputs | Wallet, Contract | The wallet checks the fee, seller and royalty outputs against the indexed datum and the parameters, and the buyer's net outflow. A wrong output also fails the script, which costs the collateral if the transaction is submitted without being evaluated first |
@@ -141,6 +141,35 @@ caught by `validators/listing.test.ak`, which calls the validator's handler with
 four more), and by `scripts/eval-applied.mjs`, which runs each deployment's applied script and
 expects a 100 ADA purchase with a 1.5 ADA fee to pass.
 
+### F6. A datum that is a constructor but not a `Listing`
+
+The compiled script reads the datum field by field, only as far as a rule needs. A `Cancel` reads
+the owner, field 0, and nothing else. So a signed `Cancel` succeeds for **any constructor datum
+whose field 0 is the signer's key hash**, however wrong the rest is: a sixth field, another
+constructor index, a price that is bytes, a buyer that is an integer, a `seller_address` that is
+not an address, or no field but the owner. It costs the same as the cancel of a real listing, and
+the same cancel without the signature fails. A `Purchase` of such a UTxO always fails, because the
+fee total expects every input at the script to carry an inline datum that is a complete `Listing`;
+so does any purchase in a transaction that carries one. Out of reach of `Cancel` are only a UTxO
+with no datum and one whose datum has no readable owner: not a constructor (an integer, a list,
+bytes, a map), or a constructor whose field 0 is missing or not a byte string. Nothing can move
+those, and they are lost for good.
+
+So today a malformed datum is never purchasable, and only the key in its field 0 can move it. The
+wallet must never create one (T8, T12).
+
+**Open question for the audit:** whether the contract should reject malformed datums strictly,
+on `Cancel` as well as on `Purchase`, instead of reading only the owner. The deployed script
+does not; its behaviour is pinned here so that the answer is a deliberate change and not a
+surprise.
+
+Tests: on the applied script only, because Aiken's typed tests cannot build an ill-typed datum.
+`scripts/eval-applied.mjs` runs `cancel_constr_datum` (a `Listing` with a sixth field, signed by
+its owner: passes, at exactly the units of `cancel_ok`), `cancel_constr_datum_unsigned` (fails),
+`purchase_constr_datum` (the purchase of `purchase_ok` with that datum: fails), and
+`cancel_bad_datum` (the integer 42, signed by the owner: fails) and `cancel_no_datum` (fails). The
+other wrong shapes named above were tried by hand on the preprod version 1 script, not in CI.
+
 ## What the contract does not do
 
 These are accepted limits, not oversights.
@@ -156,12 +185,14 @@ These are accepted limits, not oversights.
 - **It cannot be paused, upgraded or patched.** A fix is a new script hash, a new fee address and a
   new deployment. The wallet keeps the old deployment in its list until its listings drain, so
   owners can still cancel and buyers can still buy them.
-- **The datum is decoded by Aiken's generated wrapper** before the rules run. The tests in `lib/`
-  call the rules directly. `validators/listing.test.ak` calls the validator's handler with its four
-  parameters, and `scripts/eval-applied.mjs` runs the compiled script of each deployment, its
-  parameters applied, on committed script contexts: purchases that pay and one that does not, a
-  cancel, a UTxO with no datum and one whose datum is the integer 42 (both refused). No test
-  presents a malformed redeemer, or a script context of another shape, to the compiled script.
+- **The datum is read by Aiken's generated wrapper field by field, as the rules ask for it.** It is
+  not checked as a whole before they run (see F6). The tests in `lib/` call the rules directly.
+  `validators/listing.test.ak` calls the validator's handler with its four parameters, and
+  `scripts/eval-applied.mjs` runs the compiled script of each deployment, its parameters applied, on
+  committed script contexts: purchases that pay and one that does not, cancels, a UTxO with no datum,
+  one whose datum is the integer 42 (both refused), and one whose datum is a `Listing` with a sixth
+  field (its owner can cancel it, nobody can buy it). No test presents a malformed redeemer, or a
+  script context of another shape, to the compiled script.
 
 ## Off-chain rules the contract cannot enforce
 
