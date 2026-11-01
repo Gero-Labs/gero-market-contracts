@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 
 import { getAddressDetails } from '@lucid-evolution/lucid';
 
@@ -11,7 +11,12 @@ import {
   parseJsonOutput,
   runScript,
   splitBaseAddress,
+  symlinkedRepo,
+  tempDirs,
 } from './test-helpers.mjs';
+
+const dirs = tempDirs();
+after(() => dirs.cleanup());
 
 const [SIGNER_A, SIGNER_B, SIGNER_C] = ['signer-a', 'signer-b', 'signer-c'].map(madeUpKeyHash);
 const STAKE = madeUpKeyHash('stake');
@@ -163,4 +168,18 @@ test('missing or unknown options exit 2', () => {
   }
   assertBadInput(runScript('fee-address.mjs', [...full, '--bogus', 'x']), /bogus/, 'unknown option');
   assertBadInput(runScript('fee-address.mjs', [...full, 'stray']), /stray|positional/i, 'stray argument');
+});
+
+test('started through a symlink to the repo it still runs and prints the same result', () => {
+  const repo = symlinkedRepo(dirs.make('fee-address-link-'));
+  const args = [
+    '--network=preprod',
+    '--version=1',
+    `--signers=${[SIGNER_A, SIGNER_B, SIGNER_C].join(',')}`,
+    `--stake=${STAKE}`,
+  ];
+  const result = runScript('fee-address.mjs', args, { repo });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.deepEqual(parseJsonOutput(result), derive());
+  assertBadInput(runScript('fee-address.mjs', ['--network=preview', ...args.slice(1)], { repo }), /network/, 'bad input is still refused');
 });

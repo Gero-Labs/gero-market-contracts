@@ -21,6 +21,7 @@ import {
   pointerAddress,
   runScript,
   splitBaseAddress,
+  symlinkedRepo,
   tempDirs,
   v1Params,
   writeParams,
@@ -275,6 +276,21 @@ test('a params file that is not an object, not JSON or missing exits 2', () => {
     /params/i,
     'missing file',
   );
+});
+
+test('started through a symlink to the repo it still runs: bad parameters exit 2, nothing is written', () => {
+  const repo = symlinkedRepo(dirs.make('apply-link-'));
+  const input = dirs.make('apply-input-');
+  const out = dirs.make('apply-out-');
+  const params = join(input, 'params.json');
+  writeFileSync(params, JSON.stringify(v1Params(PREPROD_FEE.address, { feeBps: 1001 })));
+  const result = runScript(
+    'apply-params.mjs',
+    ['--network=preprod', '--version=1', `--params=${params}`, `--dir=${out}`],
+    { repo },
+  );
+  assertBadInput(result, /feeBps/, 'through a symlink');
+  assert.deepEqual(readdirSync(out), []);
 });
 
 test('bad command lines exit 2', () => {

@@ -7,7 +7,7 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
@@ -37,9 +37,19 @@ export function tempDirs() {
   };
 }
 
-/** Runs one of the scripts in `scripts/` for real. Without `cwd` it runs from the repo root. */
-export function runScript(name, args = [], { cwd = ROOT, env } = {}) {
-  const result = spawnSync(process.execPath, [join(ROOT, 'scripts', name), ...args], {
+/** A symlink to the repo inside `folder`, so a script can be started through a path that is not its real one. */
+export function symlinkedRepo(folder) {
+  const link = join(folder, 'repo-link');
+  symlinkSync(ROOT, link, 'dir');
+  return link;
+}
+
+/**
+ * Runs one of the scripts in `scripts/` for real. Without `cwd` it runs from the repo root.
+ * `repo` is the repo path the script is started through (a symlink to it, for instance).
+ */
+export function runScript(name, args = [], { cwd = ROOT, env, repo = ROOT } = {}) {
+  const result = spawnSync(process.execPath, [join(repo, 'scripts', name), ...args], {
     cwd,
     env: env ?? process.env,
     encoding: 'utf8',

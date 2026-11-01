@@ -15,6 +15,7 @@ import {
   feeAddressFor,
   runScript,
   splitBaseAddress,
+  symlinkedRepo,
   tempDirs,
   v1Params,
   writeParams,
@@ -203,6 +204,23 @@ test('a script.json hash that does not match exits 1 and prints both hashes (no 
   assert.ok(result.stdout.includes(fake), 'script.json hash printed');
   const printed = result.stdout.match(/\b[0-9a-f]{56}\b/g);
   assert.ok(new Set(printed).size >= 2, 'the re-applied hash is printed as well');
+});
+
+test('started through a symlink to the repo, a tampered script.json still exits 1 (it must not exit 0 unchecked)', () => {
+  const repo = symlinkedRepo(dirs.make('verify-link-'));
+  const dir = dirs.make('verify-static-');
+  const fee = feeAddressFor('preprod', 1);
+  const folder = join(dir, 'preprod-v1');
+  writeParams(dir, 'preprod', 1, v1Params(fee.address));
+  const fake = '00'.repeat(28);
+  writeJson(join(folder, 'script.json'), { scriptHash: fake, compiledCode: unapplied.compiledCode });
+  copyFileSync(BLUEPRINT, join(folder, 'plutus.json'));
+  const result = runScript('verify-params.mjs', ['--network=preprod', '--version=1', `--dir=${dir}`], { repo });
+  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+  assert.ok(result.stdout.includes(fake), 'both hashes are printed');
+  // And a missing deployment is still bad input, not a silent success.
+  const missing = runScript('verify-params.mjs', ['--network=preprod', '--version=2', `--dir=${dir}`], { repo });
+  assertBadInput(missing, /preprod-v2/, 'missing folder through a symlink');
 });
 
 test('bad input exits 2: missing files, unreadable JSON, unknown network, bad version, unknown option', () => {

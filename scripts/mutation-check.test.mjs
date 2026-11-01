@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, test } from 'node:test';
@@ -126,6 +126,35 @@ test('a surviving mutant is named, the others are killed, the exit code is 1', {
   assert.match(result.stdout, /^needs-a\s+\| lib\/demo\/rules\.ak:4\s+\| killed$/m);
   assert.match(result.stdout, /^ignored-b\s+\| lib\/demo\/rules\.ak:6\s+\| survived$/m);
   assert.equal(readFileSync(join(dir, 'lib/demo/rules.ak'), 'utf8'), RULES, 'the source is put back');
+});
+
+/** The script run through a symlink to the repo, which is not the path it really lives at. */
+function runViaSymlink(root, env = {}) {
+  const base = mkdtempSync(join(tmpdir(), 'mutation-check-link-'));
+  created.push(base);
+  const link = join(base, 'repo-link');
+  symlinkSync(ROOT, link, 'dir');
+  const result = spawnSync(process.execPath, [join(link, 'scripts', 'mutation-check.mjs'), '--root', root], {
+    encoding: 'utf8',
+    env: { ...process.env, ...env },
+  });
+  return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+}
+
+test('started through a symlink to the repo it still runs: a survivor exits 1', { skip: NEEDS_AIKEN }, () => {
+  const dir = project({ 'lib/demo/rules.ak': RULES, 'lib/demo/rules.test.ak': RULES_TESTS });
+  const result = runViaSymlink(dir);
+  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+  assert.equal(statusOf(result.stdout, 'needs-a'), 'killed');
+  assert.equal(statusOf(result.stdout, 'ignored-b'), 'survived');
+  assert.equal(readFileSync(join(dir, 'lib/demo/rules.ak'), 'utf8'), RULES, 'the source is put back');
+});
+
+test('started through a symlink to the repo it still runs: no aiken exits 2, not 0 (no aiken needed)', () => {
+  const dir = project({ 'lib/demo/rules.ak': RULES, 'lib/demo/rules.test.ak': RULES_TESTS });
+  const result = runViaSymlink(dir, { AIKEN: join(dir, 'no-such-aiken') });
+  assert.equal(result.status, 2, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /cannot run/);
 });
 
 const GATE = `pub fn gate(x: Option<Bool>) -> Bool {

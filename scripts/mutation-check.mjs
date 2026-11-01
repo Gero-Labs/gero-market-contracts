@@ -41,8 +41,10 @@ import { spawn } from 'node:child_process';
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { constants as osConstants } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+
+import { isMain } from './lib/is-main.mjs';
 
 const DEFAULT_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCE_DIRS = ['lib', 'validators'];
@@ -353,7 +355,7 @@ async function main(argv) {
   return rows.every((row) => row.status === 'killed') ? 0 : 1;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (isMain(import.meta.url)) {
   main(process.argv.slice(2)).then(
     (code) => {
       process.exitCode = code;

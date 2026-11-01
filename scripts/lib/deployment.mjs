@@ -14,6 +14,8 @@ import { parseArgs } from 'node:util';
 
 import { getAddressDetails } from '@lucid-evolution/lucid';
 
+export { isMain } from './is-main.mjs';
+
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const BLUEPRINT_PATH = join(ROOT, 'plutus.json');
 export const DEFAULT_DEPLOYMENTS_DIR = join(ROOT, 'deployments');
@@ -60,11 +62,6 @@ export function runCli(name, main) {
       process.exitCode = 2;
     }
   }
-}
-
-/** Whether the module is the script being run, and not imported (by a test, for instance). */
-export function isMain(moduleUrl) {
-  return process.argv[1] !== undefined && fileURLToPath(moduleUrl) === resolve(process.argv[1]);
 }
 
 /** Command line options of the given `{ name: { type: 'string' } }`; anything else is an error. */
