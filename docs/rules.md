@@ -86,22 +86,24 @@ As Plutus data (the full schema is in the `definitions` of `plutus.json`):
 
 ## How the validator is entered
 
-- **D1, the datum must be a `Listing`.** The validator requires a datum (`Some(listing)`). Past
-  that, the compiled script reads the datum **field by field, only as far as a rule needs**: a
+- **D1, a datum is required; only a `Listing` can be bought.** The validator requires a datum
+  (`Some(listing)`). Past that, the compiled script reads the datum **field by field, only as far as a rule needs**: a
   `Cancel` reads one field, the owner (field 0), and a `Purchase` checks, through the fee total
   ([P3](#p3-the-combined-fee)), that every input at the script is a complete inline `Listing`.
   So a UTxO at the script address that is not a well-formed listing behaves like this:
   - **A constructor datum of the wrong shape** (for example a `Listing` with a sixth field, another
     constructor index, a price that is bytes, a buyer that is an integer, or only the owner field):
-    `Purchase` always fails, and `Cancel` succeeds when the key in field 0 signs. It can never be
-    bought, and whoever holds that key can take the NFT and the ADA back.
+    `Purchase` always fails. `Cancel` succeeds only if field 0 is the key hash of a key that
+    signs, and then the holder of that key can take the NFT and the ADA back. If field 0 is bytes
+    that no one can sign as (the wrong length, a script hash, a key nobody holds), the UTxO is
+    locked like the next two.
   - **A datum with no readable owner:** not a constructor at all (the integer 42, a list), or a
     constructor whose field 0 is missing or not a byte string. `Cancel` cannot read an owner and
     fails too. Nothing can move the UTxO.
   - **No datum:** the `Some` check fails for both actions. Nothing can move the UTxO.
 
-  The last two are locked for good, NFT and ADA alike. Nothing on chain can stop someone sending
-  any of these to the script address. The wallet must never create one, and nobody should send to
+  The last two, and a wrong-shape datum whose field 0 no key signs for, are locked for good, NFT and
+  ADA alike. Nothing on chain can stop someone sending any of these to the script address. The wallet must never create one, and nobody should send to
   the script address by hand. (A listing whose datum is a hash of a valid `Listing` is a different
   case: see [Behaviours worth knowing](#behaviours-worth-knowing).) Whether the contract should
   instead reject every malformed datum on `Cancel` too is an open question for the audit: see

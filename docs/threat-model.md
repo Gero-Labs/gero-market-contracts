@@ -42,7 +42,7 @@ Gero Wallet; the contract cannot help) or **Chain** (a property of the ledger).
 | T9 | A fake "your listing": an attacker locks junk at the script with the victim's stake key and `owner` set to the victim | Wallet | A listing is shown as the user's only if `owner` is one of its own keys **and** `seller_address` is one of its own addresses. Anything else is hidden |
 | T10 | Token dust in a listing | Contract, Wallet | The seller and royalty outputs the contract requires are ADA only. The contract does not restrict what a listing UTxO holds, so the wallet shows its full value |
 | T11 | Counterfeit collections | Wallet | The wallet shows the policy id, uses a verified-collection flag, warns on lookalike names and reads royalties only from the policy's own token |
-| T12 | A UTxO sent to the script address with no datum, or with a datum that is not a `Listing` | Contract, Wallet | Nothing on chain can stop the send. None of these can be bought: a `Purchase` needs a complete inline `Listing`. Whether a `Cancel` works depends on the datum ([D1](rules.md#how-the-validator-is-entered), [F6](#f6-a-datum-that-is-a-constructor-but-not-a-listing)). With a constructor of the wrong shape, the key in its field 0 can cancel it. With no datum, or a datum that is not a constructor (an integer, a list), nobody can move it and the NFT and ADA are lost for good. The wallet never creates any of these and warns that manual sends can be unrecoverable |
+| T12 | A UTxO sent to the script address with no datum, or with a datum that is not a `Listing` | Contract, Wallet | Nothing on chain can stop the send. None of these can be bought: a `Purchase` needs a complete inline `Listing`. Whether a `Cancel` works depends on the datum ([D1](rules.md#how-the-validator-is-entered), [F6](#f6-a-datum-that-is-a-constructor-but-not-a-listing)). A constructor of the wrong shape can be cancelled only if its field 0 is the key hash of a key that signs. Otherwise, and with no datum or a datum that is not a constructor (an integer, a list), nobody can move it and the NFT and ADA are lost for good. The wallet never creates any of these and warns that manual sends can be unrecoverable |
 | T13 | Two buyers race for one listing | Chain, Wallet | The loser's transaction fails the ledger's first validation phase (input already spent) and loses no collateral. The wallet evaluates the scripts before submitting, so a transaction cannot fail the script phase and cost its collateral |
 | T14 | A malicious dApp spends the user's listing | Contract, Wallet | `Cancel` needs the owner's signature. The wallet's signing preview must show listing inputs owned by the wallet as outgoing assets |
 | T15 | The remote transaction builder is compromised and builds a buy with wrong outputs | Wallet, Contract | The wallet checks the fee, seller and royalty outputs against the indexed datum and the parameters, and the buyer's net outflow. A wrong output also fails the script, which costs the collateral if the transaction is submitted without being evaluated first |
@@ -50,8 +50,9 @@ Gero Wallet; the contract cannot help) or **Chain** (a property of the ledger).
 
 ## Behaviours the review should look at
 
-These are deliberate. Each names the tests that pin it (or, for the budget, measure it), so an
-auditor can see it is not an accident.
+F1 to F5 are deliberate. F6 is not settled: it is an open question for the audit. Each names the
+tests that pin it (or, for the budget, measure it), so an auditor can see it is not an accident, and
+F6 pins what the deployed script does today.
 
 ### F1. A listing with a datum hash
 
@@ -145,18 +146,19 @@ expects a 100 ADA purchase with a 1.5 ADA fee to pass.
 
 The compiled script reads the datum field by field, only as far as a rule needs. A `Cancel` reads
 the owner, field 0, and nothing else. So a signed `Cancel` succeeds for **any constructor datum
-whose field 0 is the signer's key hash**, however wrong the rest is: a sixth field, another
+whose field 0 is the key hash of a key that signs**, however wrong the rest is: a sixth field, another
 constructor index, a price that is bytes, a buyer that is an integer, a `seller_address` that is
 not an address, or no field but the owner. It costs the same as the cancel of a real listing, and
 the same cancel without the signature fails. A `Purchase` of such a UTxO always fails, because the
 fee total expects every input at the script to carry an inline datum that is a complete `Listing`;
-so does any purchase in a transaction that carries one. Out of reach of `Cancel` are only a UTxO
-with no datum and one whose datum has no readable owner: not a constructor (an integer, a list,
-bytes, a map), or a constructor whose field 0 is missing or not a byte string. Nothing can move
-those, and they are lost for good.
+so does any purchase in a transaction that carries one. A `Cancel` cannot move a UTxO with no datum,
+one whose datum is not a constructor (an integer, a list, bytes, a map), or one whose field 0 is
+missing, is not a byte string, or is bytes that no one can sign as (the wrong length, a script hash,
+a key nobody holds). Nothing can move those, and they are lost for good.
 
-So today a malformed datum is never purchasable, and only the key in its field 0 can move it. The
-wallet must never create one (T8, T12).
+So today a malformed datum is never purchasable, and it can be cancelled only if its field 0 is the
+key hash of a key that signs; otherwise it is locked too. The wallet must never create one (T8,
+T12).
 
 **Open question for the audit:** whether the contract should reject malformed datums strictly,
 on `Cancel` as well as on `Purchase`, instead of reading only the owner. The deployed script

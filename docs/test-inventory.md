@@ -207,7 +207,7 @@ pin tests are `preprod_v1_cancel_constr_datum`, `preprod_v1_cancel_constr_datum_
 
 Rule identifiers are those of [rules.md](rules.md).
 
-### D1. The datum must be a `Listing`
+### D1. A datum is required; only a `Listing` can be bought
 
 - Mutants: none. It is an `expect` and the wrapper's reading of the datum, not a clause.
 - Tests: `purchase_datum_none_fails`, `cancel_datum_none_fails`, and through the handler
@@ -215,10 +215,10 @@ Rule identifiers are those of [rules.md](rules.md).
 - The applied script, in `scripts/eval-applied.mjs`: `cancel_no_datum` (a UTxO with no datum) and
   `cancel_bad_datum` (an inline datum that is the integer 42) must fail. Both are signed cancels by
   the owner, so the datum is the only thing wrong with them. A datum that is a constructor but not a
-  `Listing` (`cancel_constr_datum`, `cancel_constr_datum_unsigned`, `purchase_constr_datum`) is
-  cancelled by the key in its field 0 and never bought.
-- Open question for the audit: should a malformed datum be rejected on `Cancel` too? Today only a
-  datum with no readable owner is out of reach of `Cancel`
+  `Listing` (`cancel_constr_datum`, `cancel_constr_datum_unsigned`, `purchase_constr_datum`) can be
+  cancelled when the key in its field 0 signs, and is never bought.
+- Open question for the audit: should a malformed datum be rejected on `Cancel` too? Today a
+  malformed datum can be cancelled whenever its field 0 is the key hash of a key that signs
   ([F6](threat-model.md#f6-a-datum-that-is-a-constructor-but-not-a-listing)).
 
 ### P1. The fee
@@ -415,10 +415,10 @@ depends on them:
   redeemer, or a script context of another shape (another purpose reaches `else`, which `else_fails`
   tests as a function only).
 - **Strict rejection of malformed datums.** The tests pin what the deployed script does: a datum that
-  is a constructor but not a `Listing` can be cancelled by the key in its field 0 and never bought.
-  Whether the contract should reject such a datum on `Cancel` as well is an open question for the
-  audit ([F6](threat-model.md#f6-a-datum-that-is-a-constructor-but-not-a-listing)); no test asserts
-  either answer beyond the current behaviour.
+  is a constructor but not a `Listing` can be cancelled when the key in its field 0 signs, and is
+  never bought. Whether the contract should reject such a datum on `Cancel` as well is an open
+  question for the audit ([F6](threat-model.md#f6-a-datum-that-is-a-constructor-but-not-a-listing));
+  no test asserts either answer beyond the current behaviour.
 - **The budget of several listings on the applied script.** Only the single buy is re-run in CI; the
   figures for several listings in [budget.md](budget.md) were measured once, by hand.
 - **Reference inputs and the reference-script field of outputs.** The rules do not look at either, and
