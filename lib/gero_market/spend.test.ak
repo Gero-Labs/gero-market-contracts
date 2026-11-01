@@ -137,6 +137,18 @@ test purchase_fee_at_other_stake_fails() {
 
 // ## Purchase: the seller's share (seller-paid)
 
+test purchase_fee_overpaid_cannot_make_up_for_an_underpaid_seller() {
+  // 1 ADA more to the fee address (2.5 ADA) and 1 ADA less to the seller (97.5 ADA): the buyer
+  // pays the payees the same total. The seller's due, 98.5 ADA, comes from the datum and the
+  // parameters, never from what the fee output holds, so the purchase is refused.
+  let outputs = [
+    ada_out(fee_addr, 2_500_000),
+    tagged_out(seller, 97_500_000, out_ref(0)),
+    royalty_out(),
+  ]
+  !purchase(base(), 1, outputs, [])
+}
+
 test purchase_seller_one_lovelace_short_fails() {
   let outputs = [
     fee_out(),
@@ -293,6 +305,43 @@ test purchase_hash_datum_listing_fails() fail {
     good_outputs(),
     [],
   )
+}
+
+/// A second listing of this script at `out_ref(1)`, owned by the seller: 100 ADA, no royalty,
+/// with the 2 ADA deposit, its datum inline when `inline` holds and a datum hash otherwise.
+fn second_listing(inline: Bool) -> Input {
+  let l = listing(100_000_000, [], None)
+  if inline {
+    listing_input(out_ref(1), l, deposit)
+  } else {
+    hash_datum_input(out_ref(1), l, deposit)
+  }
+}
+
+/// Buys `base()` at `out_ref(0)` in a transaction whose owner also cancels the second listing.
+/// Everything is paid: the fee output holds both fees (1.5 + 1.5 ADA), the seller and the royalty
+/// in full, and the owner signs for the cancel.
+fn purchase_next_to_a_cancel(inline: Bool) -> Bool {
+  let l = base()
+  run(
+    Some(l),
+    Purchase { first_output: 1 },
+    [listing_input(out_ref(0), l, deposit), second_listing(inline)],
+    [two_listings_fee_out(), seller_out(), royalty_out()],
+    [seller_key],
+  )
+}
+
+test purchase_next_to_a_cancelled_inline_listing_passes() {
+  purchase_next_to_a_cancel(True)
+}
+
+test purchase_next_to_a_cancelled_hash_datum_listing_fails() fail {
+  // The bought listing is inline and fully paid. The other input is a listing of the same script
+  // whose datum is a hash, cancelled by its owner in the same transaction. The combined fee reads
+  // the datum of every input at the script, and a hash is not an inline `Listing`, so the purchase
+  // fails. With that listing inline, the same transaction passes (the test above).
+  purchase_next_to_a_cancel(False)
 }
 
 // ## Purchase: first_output below zero
