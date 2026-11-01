@@ -66,6 +66,12 @@ export const EXPECTED = Object.freeze({
   cancel_ok: 'success',
   cancel_no_datum: 'failure',
   cancel_bad_datum: 'failure',
+  // A datum that is a constructor but not a `Listing` (a Listing with a sixth field). A cancel reads
+  // only the owner in field 0, so the key in that field can still cancel; a purchase checks the whole
+  // shape of every datum at the script, so it fails.
+  cancel_constr_datum: 'success',
+  cancel_constr_datum_unsigned: 'failure',
+  purchase_constr_datum: 'failure',
 });
 
 const AIKEN_VERSION = /^aiken v1\.1\.24\b/;

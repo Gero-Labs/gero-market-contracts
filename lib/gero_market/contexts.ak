@@ -17,6 +17,7 @@
 //// the output that delivers the NFT.
 
 use aiken/collection/list
+use aiken/crypto.{VerificationKeyHash}
 use cardano/address.{
   Address, Inline, Script, VerificationKey, from_verification_key,
 }
@@ -144,11 +145,16 @@ fn nft_to(owner: ByteArray) -> Output {
 
 // ## Purchases
 
-/// Buys the listing with `royalty_count` royalties, paying `fee` to the fee address and the seller
-/// and the royalties in full. With the version 1 terms the fee is 1.5 ADA (the minimum) and the
-/// seller is due 100 - 1.5 - 2 x `royalty_count` + 2 ADA.
-fn purchase(d: Deployment, royalty_count: Int, fee: Int) -> Spend {
-  let l = the_listing(royalty_count)
+/// The transaction that buys the listing with `royalty_count` royalties, paying `fee` to the fee
+/// address and the seller and the royalties in full, with `datum` on the listing UTxO. With the
+/// version 1 terms the fee is 1.5 ADA (the minimum) and the seller is due
+/// 100 - 1.5 - 2 x `royalty_count` + 2 ADA.
+fn purchase_transaction(
+  d: Deployment,
+  royalty_count: Int,
+  fee: Int,
+  datum: Datum,
+) -> Transaction {
   let seller_due = price - 1_500_000 - royalty_count * royalty_each + deposit
   let payments = [
     ada_out(d.fee_address, fee),
@@ -159,15 +165,21 @@ fn purchase(d: Deployment, royalty_count: Int, fee: Int) -> Spend {
     )
   ]
   let change = ada_out(from_verification_key(buyer_key), 400_000_000)
+  tx(
+    [wallet_utxo(buyer_key), listing_utxo(d, datum)],
+    list.concat(payments, [change, nft_to(buyer_key)]),
+    [],
+  )
+}
+
+/// Buys the listing with `royalty_count` royalties, paying `fee` to the fee address.
+fn purchase(d: Deployment, royalty_count: Int, fee: Int) -> Spend {
+  let l = the_listing(royalty_count)
   Spend {
     listing: l,
     action: Purchase { first_output: 1 },
     own_ref: out_ref(0),
-    transaction: tx(
-      [wallet_utxo(buyer_key), listing_utxo(d, InlineDatum(l))],
-      list.concat(payments, [change, nft_to(buyer_key)]),
-      [],
-    ),
+    transaction: purchase_transaction(d, royalty_count, fee, InlineDatum(l)),
   }
 }
 
@@ -193,16 +205,20 @@ pub fn purchase_fee_short(d: Deployment) -> Spend {
 
 // ## Cancels
 
-/// The owner takes the listing back: the seller's wallet UTxO pays the transaction fee, and the
-/// NFT and the deposit go back to the seller's own key.
-fn cancel_transaction(d: Deployment, datum: Datum) -> Transaction {
+/// The seller's wallet UTxO pays the transaction fee, and the NFT and the deposit go back to the
+/// seller's own key. `signers` are the required signers of the transaction.
+fn cancel_transaction(
+  d: Deployment,
+  datum: Datum,
+  signers: List<VerificationKeyHash>,
+) -> Transaction {
   tx(
     [wallet_utxo(seller_key), listing_utxo(d, datum)],
     [
       nft_to(seller_key),
       ada_out(from_verification_key(seller_key), 499_000_000),
     ],
-    [seller_key],
+    signers,
   )
 }
 
@@ -213,28 +229,96 @@ pub fn cancel_ok(d: Deployment) -> Spend {
     listing: l,
     action: Cancel,
     own_ref: out_ref(0),
-    transaction: cancel_transaction(d, InlineDatum(l)),
+    transaction: cancel_transaction(d, InlineDatum(l), [seller_key]),
   }
 }
 
 /// A signed cancel of a UTxO at the script that has no datum: the ledger hands the validator no
-/// datum at all. Expected: failure (the UTxO can never be spent).
+/// datum at all. Expected: failure, and the UTxO can never be spent.
 pub fn cancel_no_datum_context(d: Deployment) -> ScriptContext {
   let redeemer: Data = Cancel
   ScriptContext {
-    transaction: cancel_transaction(d, NoDatum),
+    transaction: cancel_transaction(d, NoDatum, [seller_key]),
     redeemer,
     info: Spending { output: out_ref(0), datum: None },
   }
 }
 
 /// A signed cancel of a UTxO at the script whose inline datum is the integer 42, not a `Listing`.
-/// Expected: failure, before any rule runs (the UTxO can never be spent).
+/// Expected: failure. A cancel reads the owner from field 0 of the datum and an integer has no
+/// fields, so even the owner's signed cancel fails and the UTxO can never be spent.
 pub fn cancel_bad_datum_context(d: Deployment) -> ScriptContext {
   let redeemer: Data = Cancel
   let datum: Data = 42
   ScriptContext {
-    transaction: cancel_transaction(d, InlineDatum(datum)),
+    transaction: cancel_transaction(d, InlineDatum(datum), [seller_key]),
+    redeemer,
+    info: Spending { output: out_ref(0), datum: Some(datum) },
+  }
+}
+
+// ## Datums that are not a Listing but are a constructor
+
+/// The five fields of the listing of `cancel_ok` followed by a sixth, so every field the script
+/// reads on its own is a valid one and only the datum as a whole is not a `Listing`. Aiken cannot
+/// build an ill-typed `Listing`, so the contexts below carry it as raw `Data`.
+type ListingWithSixthField {
+  owner: VerificationKeyHash,
+  seller_address: Address,
+  price: Int,
+  royalties: List<Payee>,
+  buyer: Option<VerificationKeyHash>,
+  sixth: Int,
+}
+
+/// The inline datum of the three contexts below: constructor 0 with six fields, the first the
+/// seller's key hash.
+fn sixth_field_datum() -> Data {
+  let l = the_listing(1)
+  let datum: Data = ListingWithSixthField {
+    owner: l.owner,
+    seller_address: l.seller_address,
+    price: l.price,
+    royalties: l.royalties,
+    buyer: l.buyer,
+    sixth: 1,
+  }
+  datum
+}
+
+/// A cancel of a UTxO at the script whose inline datum is a `Listing` with a sixth field, signed
+/// by the key in field 0. Expected: success. A cancel reads only that key, so the script lets its
+/// owner take the UTxO back.
+pub fn cancel_constr_datum_context(d: Deployment) -> ScriptContext {
+  let redeemer: Data = Cancel
+  let datum = sixth_field_datum()
+  ScriptContext {
+    transaction: cancel_transaction(d, InlineDatum(datum), [seller_key]),
+    redeemer,
+    info: Spending { output: out_ref(0), datum: Some(datum) },
+  }
+}
+
+/// `cancel_constr_datum_context` with no signature. Expected: failure. The signature, not the
+/// datum, is what moves the UTxO.
+pub fn cancel_constr_datum_unsigned_context(d: Deployment) -> ScriptContext {
+  let redeemer: Data = Cancel
+  let datum = sixth_field_datum()
+  ScriptContext {
+    transaction: cancel_transaction(d, InlineDatum(datum), []),
+    redeemer,
+    info: Spending { output: out_ref(0), datum: Some(datum) },
+  }
+}
+
+/// The purchase of `purchase_ok`, the same inputs and outputs, of a UTxO whose inline datum is the
+/// `Listing` with a sixth field. Expected: failure. The fee total expects every input at the
+/// script to be a `Listing`, so a datum of any other shape cannot be bought.
+pub fn purchase_constr_datum_context(d: Deployment) -> ScriptContext {
+  let redeemer: Data = Purchase { first_output: 1 }
+  let datum = sixth_field_datum()
+  ScriptContext {
+    transaction: purchase_transaction(d, 1, 1_500_000, InlineDatum(datum)),
     redeemer,
     info: Spending { output: out_ref(0), datum: Some(datum) },
   }

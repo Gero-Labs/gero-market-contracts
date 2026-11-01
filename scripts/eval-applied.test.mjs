@@ -111,6 +111,15 @@ test('every committed context decodes to a script context of the spending kind',
   }
 });
 
+test('expects a signed cancel of a malformed constructor datum to pass, and everything else done with it to fail', () => {
+  assert.equal(EXPECTED.cancel_constr_datum, 'success');
+  assert.equal(EXPECTED.cancel_constr_datum_unsigned, 'failure');
+  assert.equal(EXPECTED.purchase_constr_datum, 'failure');
+  // Not a constructor at all: nobody can cancel it.
+  assert.equal(EXPECTED.cancel_bad_datum, 'failure');
+  assert.equal(EXPECTED.cancel_no_datum, 'failure');
+});
+
 // ---------------------------------------------------------------------------------------------
 // Pins and the tie to a deployment
 
@@ -242,7 +251,11 @@ aikenTest('the committed deployments give every expected verdict, with the budge
   assert.deepEqual([rows.purchase_no_royalty.mem, rows.purchase_no_royalty.cpu], ['223,756', '90,225,409']);
   assert.deepEqual([rows.purchase_ok.mem, rows.purchase_ok.cpu], ['298,562', '119,908,574']);
   assert.deepEqual([rows.purchase_three_royalties.mem, rows.purchase_three_royalties.cpu], ['448,174', '179,274,904']);
-  assert.match(result.stdout, /7 contexts on 1 deployment: 7 as expected, 0 unexpected/);
+  // The signed cancel of a datum with a sixth field costs exactly what the cancel of a real listing
+  // costs: the script reads only the owner of either.
+  assert.deepEqual([rows.cancel_ok.mem, rows.cancel_ok.cpu], ['32,417', '9,436,911']);
+  assert.deepEqual([rows.cancel_constr_datum.mem, rows.cancel_constr_datum.cpu], ['32,417', '9,436,911']);
+  assert.match(result.stdout, /10 contexts on 1 deployment: 10 as expected, 0 unexpected/);
 });
 
 aikenTest('a context whose verdict is not the expected one exits 1', () => {
@@ -255,5 +268,5 @@ aikenTest('a context whose verdict is not the expected one exits 1', () => {
   writeFileSync(copy.tests, source.replace(`#"${contextHex('purchase_ok')}"`, `#"${short}"`));
   const result = evaluate(copy);
   assertMismatch(result, /UNEXPECTED: preprod-v1 purchase_ok: expected success, got failure/);
-  assert.match(result.stdout, /7 contexts on 1 deployment: 6 as expected, 1 unexpected/);
+  assert.match(result.stdout, /10 contexts on 1 deployment: 9 as expected, 1 unexpected/);
 });
