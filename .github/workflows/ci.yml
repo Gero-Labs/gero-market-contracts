@@ -34,6 +34,8 @@ jobs:
           git diff --exit-code plutus.json
       - name: Test
         run: npm test
+      - name: Committed deployments verify
+        run: node scripts/verify-deployments.mjs
       - name: Applied scripts on their script contexts
         run: node scripts/eval-applied.mjs
       - name: Mutation check
