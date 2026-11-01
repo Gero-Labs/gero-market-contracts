@@ -108,7 +108,8 @@ seller_due = share + deposit
 ```
 
 The deposit is the whole lovelace of the listing UTxO as it was spent, read from the input at the
-listing's own output reference, wherever that input sits among the transaction's inputs.
+listing's own output reference, wherever that input sits among the transaction's inputs. It is paid
+out of that input, so it is the seller's own ADA coming back and costs the buyer nothing.
 
 The transaction is accepted when P2, P3, P5 and P6 all hold, with each payment checked as P4 says.
 P1 defines the fee and P7 is a non-rule.
@@ -278,8 +279,9 @@ transaction pays:
 | seller output (at `first_output`) | 98.5 ADA | `seller_address` | the tag |
 | royalty output (next) | 2 ADA | the creator | the tag |
 
-The buyer sends out `1.5 + 98.5 + 2 = 102` ADA, which is the price plus the deposit, plus the
-transaction fee and the minimum ADA of the output that receives the NFT.
+The payees receive `1.5 + 98.5 + 2 = 102` ADA, but 2 ADA of that is the deposit, which comes out of
+the listing input. The buyer's net outflow is therefore the price, 100 ADA, plus the transaction fee.
+The buyer also funds the minimum ADA of the output that receives the NFT, and that ADA stays theirs.
 
 ### Two purchases in one transaction
 

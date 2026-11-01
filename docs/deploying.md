@@ -138,7 +138,8 @@ preprod keys on mainnet: they were generated on a development machine.
   parameter that has a valid shape and a wrong value gives a valid script with another hash, and this
   check is what catches it.
 - [ ] Publish a UPLC verification of the script (as for the CIP-113 deployments, for example on
-  uplc.link) so that anyone can compare the deployed script with the blueprint.
+  uplc.link) so that anyone can compare the deployed script with the blueprint. Keep the link, or a
+  note of how the check was done: it is recorded in `uplcVerification` of `deployment.json` (step 6).
 - [ ] Commit the folder (`fee-address.json`, `params.json`, `plutus.json`, `script.json`) in a pull
   request with two approvals. From here on the folder is never edited. Nothing has been signed or sent.
 
@@ -180,12 +181,53 @@ mainnet publish therefore needs a reviewed change to that script first.
 
 ### 6. Record it
 
-- [ ] Write `deployments/mainnet-v1/deployment.json` by hand. It holds at least: the network and
-  version, the script hash, the reference script's transaction id and output index, the always-fail
-  address, the fee address, the parameters, the source commit of the audited code, and the date. No
-  tool writes this file today. No existing file in the folder changes.
+- [ ] Write `deployments/mainnet-v1/deployment.json` by hand, after the on-chain check, in exactly
+  this shape (the placeholders in angle brackets are the values to fill in). No script in this
+  repository writes the file, and no existing file in the folder changes.
+
+  ```json
+  {
+    "network": "mainnet",
+    "version": 1,
+    "scriptHash": "<56 hexadecimal characters>",
+    "referenceScript": "<transaction id>#<output index>",
+    "referenceScriptAddress": "<the always-fail address>",
+    "feeAddress": "<addr1...>",
+    "feeNativeScript": { "type": "all", "scripts": ["..."] },
+    "params": {
+      "feeBps": 100,
+      "minFeeLovelace": 1500000,
+      "maxFeeLovelace": 5000000
+    },
+    "plutusVersion": "V3",
+    "aikenVersion": "v1.1.24",
+    "stdlibVersion": "v4.0.0",
+    "sourceCommit": "<git commit of the build that was applied>",
+    "uplcVerification": "<link, or how it was checked>"
+  }
+  ```
+
+  | Field | What it holds |
+  |---|---|
+  | `network` | `mainnet` or `preprod`, as in the folder name |
+  | `version` | the version number, as in the folder name and the `after` slot of the fee address |
+  | `scriptHash` | the hash of the applied script, equal to `script.json` and to the chain |
+  | `referenceScript` | the output that holds the reference script, as `<transaction id>#<output index>` |
+  | `referenceScriptAddress` | the always-fail address that output sits at |
+  | `feeAddress` | the fee address, equal to `feeAddress` in `params.json` |
+  | `feeNativeScript` | the fee native script exactly as `fee-address.mjs` prints it, as in `fee-address.json` |
+  | `params` | the three numeric terms, equal to `params.json` (`maxFeeLovelace` is `null` for no cap) |
+  | `plutusVersion` | `V3` |
+  | `aikenVersion` | the Aiken version that built the blueprint, `v1.1.24` |
+  | `stdlibVersion` | the standard library the build used, `v4.0.0` |
+  | `sourceCommit` | the git commit of the build that was applied; for mainnet, the audited commit |
+  | `uplcVerification` | the link to the UPLC verification of step 3, or a note of how the script was checked |
+
+  The date and the transaction id of the publish go in the commit message that adds the file, not in
+  the file.
 - [ ] Two people compare every field of `deployment.json` with the chain and with the rest of the
-  folder (hash, output reference, fee address, parameters, commit) before it is committed.
+  folder (hash, output reference and address, fee address and native script, parameters, versions,
+  commit, verification) before it is committed.
 - [ ] Only then does Gero Wallet add the deployment to its list, held to the review bar of the
   CIP-113 deployments. New listings go to the newest deployment, and older ones stay in the list until
   their listings drain.
