@@ -52,18 +52,31 @@ export class CheckFailure extends Error {}
 // ---------------------------------------------------------------------------------------------
 // Running
 
+function reportFailure(name, error) {
+  if (error instanceof CheckFailure) {
+    console.log(error.message);
+    process.exitCode = 1;
+  } else {
+    console.error(`${name}: ${error?.message ?? error}`);
+    process.exitCode = 2;
+  }
+}
+
 /** Runs `main`; turns a thrown UsageError, CheckFailure or any other error into an exit code. */
 export function runCli(name, main) {
   try {
     main();
   } catch (error) {
-    if (error instanceof CheckFailure) {
-      console.log(error.message);
-      process.exitCode = 1;
-    } else {
-      console.error(`${name}: ${error.message}`);
-      process.exitCode = 2;
-    }
+    reportFailure(name, error);
+  }
+}
+
+/** `runCli` for a `main` that returns a promise. */
+export async function runCliAsync(name, main) {
+  try {
+    await main();
+  } catch (error) {
+    reportFailure(name, error);
   }
 }
 
@@ -138,6 +151,18 @@ export function deploymentPaths(dir, network, version) {
     plutus: join(folder, 'plutus.json'),
     script: join(folder, 'script.json'),
   };
+}
+
+/** script.json: `{ scriptHash, compiledCode }`, both checked for their shape (not for being the same script). */
+export function readScriptJson(path) {
+  const script = readJsonFile(path, 'script.json');
+  if (typeof script?.scriptHash !== 'string' || !KEY_HASH.test(script.scriptHash)) {
+    throw new UsageError(`script.json (${path}) has no scriptHash of 56 lowercase hex characters`);
+  }
+  if (typeof script.compiledCode !== 'string' || !/^(?:[0-9a-f]{2})+$/.test(script.compiledCode)) {
+    throw new UsageError(`script.json (${path}) has no compiledCode in hex`);
+  }
+  return script;
 }
 
 /** Whether anything is at `path`, a dangling symlink included (`existsSync` would follow it and say no). */

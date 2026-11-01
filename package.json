@@ -11,6 +11,7 @@
   },
   "devDependencies": {
     "@lucid-evolution/lucid": "0.8.1",
+    "@lucid-evolution/provider": "0.4.1",
     "@noble/hashes": "2.4.0"
   },
   "overrides": {

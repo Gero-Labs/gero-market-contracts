@@ -112,7 +112,8 @@ compiler v1.1.24, Plutus V3, standard library v4.0.0 and fuzz v3.0.0.
 JavaScript dependencies are exact versions, each at least 14 days old when it was added. The
 `overrides` in `package.json` pin three packages that Lucid Evolution pulls in with open version
 ranges (`effect`, `multipasta`, `cbor-x`), so that `npm install` cannot float past that rule.
-Change them together with the dependency that needs them.
+Change them together with the dependency that needs them. `@lucid-evolution/provider` is a direct
+dependency at the exact version Lucid Evolution itself pins (0.4.1), so there is one copy of it.
 
 ## Deployments
 

@@ -38,6 +38,7 @@ import {
   parseNetwork,
   parseVersion,
   readJsonFile,
+  readScriptJson,
   readUnappliedBlueprint,
   requireOption,
   runCli,
@@ -74,17 +75,6 @@ function unappliedScript() {
     );
   }
   return validator.compiledCode;
-}
-
-function readScriptJson(path) {
-  const script = readJsonFile(path, 'script.json');
-  if (typeof script?.scriptHash !== 'string' || !/^[0-9a-f]{56}$/.test(script.scriptHash)) {
-    throw new UsageError(`script.json (${path}) has no scriptHash of 56 lowercase hex characters`);
-  }
-  if (typeof script.compiledCode !== 'string' || !/^(?:[0-9a-f]{2})+$/.test(script.compiledCode)) {
-    throw new UsageError(`script.json (${path}) has no compiledCode in hex`);
-  }
-  return script;
 }
 
 function main() {

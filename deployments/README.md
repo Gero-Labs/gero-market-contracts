@@ -98,9 +98,19 @@ Run these from the repository root. Step 4 needs Aiken v1.1.24 (the version that
 
    It must exit 0. Exit 1 prints both hashes (or the `fee-address.json` mismatch): do not publish,
    find out which encoding or file is wrong.
-6. **Publish.** Only after step 5: commit the folder, upload the reference script, lock it at an
-   always-fail address, and record the script hash, reference script output and source commit in the
-   wallet's deployment list.
+6. **Publish.** Only after step 5: commit the folder, then upload the reference script and lock it
+   at an always-fail address. `publish-reference.mjs` builds that transaction, unsigned, for a
+   preprod address that holds funds. It reads no key, signs nothing, and refuses mainnet:
+
+   ```sh
+   node scripts/publish-reference.mjs --network preprod --version 1 --from <addr_test1...> > publish.cbor
+   ```
+
+   The transaction CBOR (hex) goes to stdout. A summary goes to stderr: the always-fail address,
+   the script hash, the lovelace of the reference script output and the fee. The output sits at the
+   enterprise address of the native script `{"type":"any","scripts":[]}`, which nothing can
+   satisfy, with no datum. The owner of `--from` signs and sends it elsewhere. Then record the script
+   hash, the reference script output and the source commit in the wallet's deployment list.
 
 Steps 4 and 5 take `--dir <folder>` to work in another deployments folder than this one.
 
