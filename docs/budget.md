@@ -1,16 +1,30 @@
 # Execution budget of the Gero listing contract
 
-Measured on 2026-10-31 with Aiken v1.1.24 (validator source as of commit `69cc351`), against the
-mainnet transaction limits of epoch 665.
+Measured on 2026-10-31 with Aiken v1.1.24 (validator source as of commit `69cc351`, unchanged
+through commit `16751b1`), against the mainnet transaction limits of epoch 665.
+
+**The script measured** is the compiled validator in `plutus.json`, script hash
+`7d20d57995ad7957e334902dcb91e45d39a1a727ba02cb48f300f03c`, 1,864 bytes, before any parameter is
+applied. The compiled-script figures below were taken after applying the four version 1 terms (a fee
+address, 100, 1,500,000 and `Some(5,000,000)`). The preprod version 1 script
+(`558802cc2e2f21e4e13662cdf73f979ce0140e7dbd7ce13911a9063d`, 1,978 bytes) is the same code with the
+preprod parameters applied: it differs from the measured script only in those parameters, and so
+will any later script built from the same source.
 
 ## In short
 
 - **Buying several listings in one transaction costs more than the sum of single buys.** Every
-  listing's validator walks every listing input of the transaction (spec 5.4 rule 3), so the cost
-  of the transaction grows with the square of the number of listings.
-- **Bulk-buy ceiling: 10 listings** when each has at most one royalty and the buyer pays from one
-  wallet UTxO. That uses 76.0% of the memory limit and 49.4% of the CPU limit. Eleven listings use
-  90.7% of the memory limit. With three royalties per listing the ceiling is 7.
+  listing's validator walks every listing input of the transaction (the combined fee, rule P3 of
+  [rules.md](rules.md#p3-the-combined-fee)), so the cost of the transaction grows with the square
+  of the number of listings.
+- **Bulk-buy ceiling by Aiken's cost model: 10 listings** when each has at most one royalty and the
+  buyer pays from one wallet UTxO. That uses 76.0% of the memory limit and 49.4% of the CPU limit.
+  Eleven listings use 90.7% of the memory limit. With three royalties per listing the ceiling is 7.
+- **Treat these ceilings (10, and 7 with three royalties) as upper bounds, and evaluate every
+  transaction before submitting it.** They come from the cost model built into Aiken v1.1.24, not
+  from the node's parameters, and they assume the transaction shape modelled here. A builder must
+  evaluate each transaction with the node's own parameters before it submits it, and must not rely
+  on these tables for the budget it declares.
 - **A single buy costs about 300,000 memory units and 120 million CPU steps** with one royalty
   (1.8% and 1.2% of the limits), about 0.026 ADA of execution fee. With no royalty it is about
   224,000 and 90 million, with three royalties about 448,000 and 179 million.
@@ -36,6 +50,11 @@ outputs (each tagged with that listing's own output reference), the buyer's chan
 per listing that delivers the NFT. A listing is 100 ADA with a 2 ADA deposit and, unless stated,
 one royalty of 2 ADA paid to a base address. `budget_purchase_n_N` runs the validator for the
 first listing of that transaction.
+
+The ledger sorts a transaction's inputs (by transaction id, then index), so a builder does not
+choose their order. The model puts the buyer's wallet UTxO first, which is the conservative
+placement: the validator finds its own input by walking the list from the front, so every input
+ahead of a listing adds to what that listing's run costs.
 
 Aiken reports the units of the whole test, including the work of building the transaction, so
 each purchase test has a matching `budget_baseline_n_N` that builds the same transaction and checks
@@ -97,7 +116,7 @@ million CPU steps more than the one before it (finding its own input and its out
 further), so the first run is the cheapest and the last the dearest. At N = 10 the last run costs
 1,300,973 memory units and 513,870,803 CPU steps.
 
-## The bulk-buy ceiling (phase 3)
+## The bulk-buy ceiling
 
 **The largest N under 80% of both limits is 10** (one royalty per listing, one wallet UTxO). It was
 measured directly, not interpolated: N = 10 uses 76.0% of the memory limit and 49.4% of the CPU
@@ -153,23 +172,33 @@ leave out the wrapper.
 
 ## Why the cost is quadratic
 
-The combined fee check (spec 5.4 rule 3) lets one fee output pay for every listing in the
-transaction. To know what the fee output must hold, the validator of each listing decodes the
-datum of every input at the contract's script hash and adds up their fees, then compares the sum
-with what the transaction pays to the fee address. With N listings there are N validator runs and
-each walks N inputs, so the work is proportional to N times N. That is why a run at N = 10 costs
-four times a run at N = 1 while the transaction costs about 42 times as much. Nothing else in the
-validator depends on N.
+The combined fee check ([rule P3](rules.md#p3-the-combined-fee)) lets one fee output pay for every
+listing in the transaction. To know what the fee output must hold, the validator of each listing
+decodes the datum of every input at the contract's script hash and adds up their fees, then compares
+the sum with what the transaction pays to the fee address. That second step, `lovelace_paid_to`,
+walks every output of the transaction. With N listings there are N validator runs and each walks N
+inputs, so the work is proportional to N times N. That is why a run at N = 10 costs four times a run
+at N = 1 while the transaction costs about 42 times as much.
+
+The walk over the outputs grows with N too in this model, because every added listing adds its
+seller, royalty and delivery outputs. It is not quadratic in itself (each run walks the outputs once),
+but it means the cost depends on how many outputs the transaction has, not only on the listings.
 
 ## What these figures do not include
 
 - **The node's cost model.** Aiken v1.1.24 evaluates with its own built-in Plutus V3 cost model.
   The node may use slightly different values. The builder must evaluate every transaction with the
   node's parameters before it submits it and must not rely on these tables for the budget it sets.
-- **Script size and transaction size.** The validator is about 1.9 KB. Spending it from a reference
-  script is charged by the byte, not in execution units. Each listing also adds an input, a
-  redeemer and several outputs to a transaction that is limited to 16,384 bytes. Neither is
-  measured here.
+- **Outputs beyond the modelled shape.** `lovelace_paid_to` walks every output once per run, so a
+  transaction with more outputs than the model (more change outputs, a payment to a third party)
+  costs more. Measured on 2026-11-01 with the tests only (no wrapper), by appending ADA-only outputs
+  to a base address after the modelled ones in a one-listing purchase: each extra output adds about
+  4,400 memory units and 2.7 million CPU steps to every run, so about 44,000 memory units (0.27% of
+  the limit) per extra output at N = 10.
+- **Script size and transaction size.** The validator is 1,864 bytes before its parameters and
+  1,978 bytes with the preprod parameters applied. Spending it from a reference script is charged by
+  the byte, not in execution units. Each listing also adds an input, a redeemer and several outputs
+  to a transaction that is limited to 16,384 bytes. Neither is measured here.
 - **Datum shapes other than the tests'.** The tests use a base-address seller and base-address
   royalty payees. Other address forms, longer datums and more royalties change the decoding cost.
 - **Changes to the validator.** Any change to `spend.ak`, `rules.ak` or `fee.ak` changes these

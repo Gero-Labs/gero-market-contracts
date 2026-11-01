@@ -3,9 +3,9 @@
 The on-chain contract behind NFT listings in Gero Wallet. It is a Plutus V3 validator written in
 [Aiken](https://aiken-lang.org) for Cardano, and it is licensed under Apache-2.0.
 
-This is an independent implementation, written from a published specification. The repository is
-public from the first commit so that anyone can match a deployed script hash to the source in
-this repository.
+This is an independent implementation, written from the specification in
+[docs/rules.md](docs/rules.md). The repository is public from the first commit so that anyone can
+match a deployed script hash to the source in this repository.
 
 ## What the contract does
 
@@ -52,14 +52,16 @@ fee address, so a transaction that buys listings of two versions cannot pay one 
 
 ### Buying (`Purchase`)
 
-1. **The fee is paid.** The fee is worked out from the listing's price and the contract's fee
-   terms. The transaction must pay at least that much to the fee address. When several listings of
-   this contract version are bought in one transaction, one fee output may cover them, as long as
-   the fee address receives at least the sum of all their fees.
-2. **The seller is paid.** The seller output goes to `seller_address`. It holds the price minus
-   the fee minus the royalties, plus the ADA deposit that was locked with the NFT, so the deposit
-   goes back to the seller. This amount is computed from the datum and the contract's terms, never
-   from what the buyer happened to pay, so overpaying the fee cannot shortchange the seller.
+1. **The fee is paid.** A listing's fee is worked out from its price and the contract's fee terms.
+   The transaction must pay the fee address at least the sum of the fees of **every listing input of
+   this contract in the transaction, whatever its redeemer**, not only the listings being bought.
+   So one fee output can cover several listings bought together, and a listing cancelled in the same
+   transaction adds its fee too (the wallet never mixes the two).
+2. **The seller is paid.** The seller output goes to `seller_address`. It holds at least the price
+   minus the fee minus the royalties, plus the ADA deposit that was locked with the NFT, so the
+   deposit goes back to the seller. This amount is computed from the datum and the contract's
+   terms, never from what the buyer happened to pay, so overpaying the fee cannot shortchange the
+   seller.
 3. **Royalties are paid.** Each royalty output follows the seller output, in datum order, and pays
    its address at least its amount. Every royalty must be more than zero.
 4. **The seller's share must be positive.** A listing whose royalties and fee leave nothing for the
@@ -80,6 +82,16 @@ transaction can send the NFT anywhere, or list it again at a new price (a repric
 
 Minting, withdrawing, certificates, votes and proposals with this script all fail, so it cannot be
 used for anything but holding listings.
+
+## Documentation
+
+| Page | What it is for |
+|---|---|
+| [docs/rules.md](docs/rules.md) | The specification: parameters, types, every rule with examples, and what the contract cannot enforce |
+| [docs/threat-model.md](docs/threat-model.md) | The threats, what stops each one, and the behaviours a reviewer should look at |
+| [docs/test-inventory.md](docs/test-inventory.md) | Every rule and threat mapped to its tests and mutation checks, with the mutation-check output |
+| [docs/budget.md](docs/budget.md) | Execution cost, and the limit on buying several listings in one transaction |
+| [docs/deploying.md](docs/deploying.md) | The checklist for putting a version on a network, mainnet included |
 
 ## Parameters
 
@@ -117,8 +129,9 @@ dependency at the exact version Lucid Evolution itself pins (0.4.1), so there is
 
 ## Deployments
 
-Every deployment is recorded under `deployments/` (the procedure is in
-[deployments/README.md](deployments/README.md)): the script hash, the parameter values, the
+Every deployment is recorded under `deployments/` (the tools are described in
+[deployments/README.md](deployments/README.md) and the full checklist is in
+[docs/deploying.md](docs/deploying.md)): the script hash, the parameter values, the
 reference script's output reference and the source commit. A different fee, fee address or contract
 fix is a new deployment with a new script hash. Older deployments stay listed so that their
 listings can still be cancelled and bought.

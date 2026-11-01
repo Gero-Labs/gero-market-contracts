@@ -48,7 +48,8 @@ without using the parameter encoder:
 
 A missing `fee-address.json` is bad input (exit 2) for both. This stops a version 2 deployment from
 quietly reusing the version 1 fee address, which would let one transaction pay one fee for both
-versions (spec 5.9).
+versions (see [the combined fee](../docs/rules.md#p3-the-combined-fee)). The full checklist for a
+deployment is in [docs/deploying.md](../docs/deploying.md).
 
 ## Sweeping fees from the fee address
 
