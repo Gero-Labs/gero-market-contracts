@@ -1,0 +1,31 @@
+{
+  "nativeScript": {
+    "type": "all",
+    "scripts": [
+      {
+        "type": "atLeast",
+        "required": 2,
+        "scripts": [
+          {
+            "type": "sig",
+            "keyHash": "2302f82ddb1cb59ea402d28022ff21d5746170297eb1e666c4dd68dc"
+          },
+          {
+            "type": "sig",
+            "keyHash": "5c6af32c872d67ed1e7b352c4d7ea1d9b229de78df9fd43e10476980"
+          },
+          {
+            "type": "sig",
+            "keyHash": "a3d6a813c828539551dd3313e5d9620b1c2a679fe65bbb896625217f"
+          }
+        ]
+      },
+      {
+        "type": "after",
+        "slot": 1
+      }
+    ]
+  },
+  "scriptHash": "07a947309e200dc47e2edf47b8909a8c2d46a102c3f99cd09ce68e05",
+  "address": "addr_test1zqr6j3esncsqm3r79m050wysn2xz634pqtpln8xsnnngup00zdhpv57vpc7kafrx54kk2lwr45mug3qfsewgp5cdqwusxeyzuc"
+}

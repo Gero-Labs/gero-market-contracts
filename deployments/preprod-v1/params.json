@@ -1,0 +1,6 @@
+{
+  "feeAddress": "addr_test1zqr6j3esncsqm3r79m050wysn2xz634pqtpln8xsnnngup00zdhpv57vpc7kafrx54kk2lwr45mug3qfsewgp5cdqwusxeyzuc",
+  "feeBps": 100,
+  "minFeeLovelace": 1500000,
+  "maxFeeLovelace": 5000000
+}

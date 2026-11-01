@@ -1,0 +1,317 @@
+{
+  "preamble": {
+    "title": "gero-labs/gero-market-contracts",
+    "description": "Gero listing contract: NFT marketplace listing validator for Cardano",
+    "version": "0.0.0",
+    "plutusVersion": "v3",
+    "compiler": {
+      "name": "Aiken",
+      "version": "v1.1.24+bacbeb3"
+    },
+    "license": "Apache-2.0"
+  },
+  "validators": [
+    {
+      "title": "listing.listing.spend",
+      "datum": {
+        "title": "datum",
+        "schema": {
+          "$ref": "#/definitions/gero_market~1types~1Listing"
+        }
+      },
+      "redeemer": {
+        "title": "action",
+        "schema": {
+          "$ref": "#/definitions/gero_market~1types~1Action"
+        }
+      },
+      "compiledCode": "5907b70101003333222229800aba2aba1aba0aab9faab9eaab9dab9a9bad0049bad00348888888896600264653001300a00198051805800cdc3a4005300a0024888966002600460146ea800e2653001300f00198079808000cdc3a400091119912cc004c00c00626464b300130170028024590141bad3015001301137540151598009804000c56600260226ea802a00516404916403c8078660024464b30013004001899192cc004c06000a0091640546eb8c058004c048dd5001c56600260120031323259800980c00140122c80a8dd7180b00098091baa0038b2020404060206ea800a460266028003222329800800c01200680088896600200510018cc00400e6032005330043018002001400c80b246026602860280033722911009b8f488100911919800800801912cc00400629422b30013371e6eb8c05800400e2946266004004602e002808901448c04cc050c050c050c050c050c050c050c050006444464b30013006301337540051325980099b880010028800c40090131bad3017301437540051001404864b30013371000600310018801a0243370666e0801000d20a09c0191809980a180a180a000c8896600266e2400520008801456600200514bd70466002007301600299b804800400500320264040911111111111919912cc004c03cc070dd500844c9660026020603a6ea805e2646644b3001301830203754005133225980099b884800000a2b30013371266453001002a4001225980099baf302a302737546054604e6ea8c05cc09cdd500119ba548008cc0a4dd4801a5eb82264b30013370e900218139baa001899192cc004c070c0a4dd500144c8c8c8c8ca60026064003375c606400b375a60640073758606400491112cc004c0dc01626602e606c010264660020020044464b30010028992cc004c0a400626464b3001303d00280845903a1bae303b001303737540111598009817000c566002606e6ea802201d1640e11640d481a8c0d4dd5003c4c9660026052606c6ea80062646464b3001303e00289980f181e80189802981f00345903b1bad303c001303c001303737540031640d4607200481b8c00800a2c81a0606400260620026060002605e00260546ea800a2c81404cdc0001cc004dd6980b98149baa001813409605e8090c0acc0a0dd5000c59026180a98139baa3017302737540051001409480a0dd6181318119baa019375c604c60466ea801260026eb0c044c08cdd500cd2000912cc004cdd7981418129baa00202e899b80001300b3756602a604a6ea800a20028119012456600330013026001980998119baa00699b8000230093756602660466ea801600680422b3001329800800cc0a000a6eb0c030c090dd5003a00222259800800c528c4c96600200714a115980099b8848000dd6980b98139baa0018acc00660026054007302a30273754003375a602e604e6ea800600e8062330010049815801cc0ac0090044528204a8a5040948140c0a400502744c966002603660466ea8006294626601e6eb0c038c090dd500d1bae3027302437540028110c098c09cc09cc09cc09cc08cdd5003452820428a50408514a0810a294102119b81337026eb4c03cc084dd50024c004dd6980798109baa00480f407604e805260026eb0c024c084dd5002520009119b80001375a602660466ea80090104c0040226eb0c03cc084dd500bcdd6981218109baa01a402116407c6044603e6ea8c088c07cdd50009b94376602664660020026eb0c088c07cdd500a912cc0040062d1325980099baf30243021375400202b13011302137540031330030033025002407c6046002810a2660126eb0c020c078dd500a1bae3021301e375400280e0c080c074dd500845901b11112cc004cdd79811180f9baa0040038acc004cdd7a60101a000374c64660020026eacc040c080dd5002912cc004006297adef6c6089919912cc004c04400a2b300130100028800c401102244cc09800ccc0140140050221bae302100130260023024001408915980099b8900230053756601e603e6ea8012266ebcc034c07cdd500219ba548010cc084dd4800a5eb82294101d4528203a8a50407444b3001300f301c3754005132323259800981200144cc044c08c00c4c9660026026003132598009813000c4c8c966002602c003132598009814800c4cc058c0a00040262c8130c090dd500145660026036003132323298009bad302a0019bad302a0039bad302a002488966002605c00900e8b20561815000981480098121baa0028b2044408860446ea8004c0940062c8118c084dd50014566002603000315980098109baa002802c5902245901f203e301f375400316408460440026044002603a6ea800a2c80d88c8cc88cc0080080048966002003003899192cc004c0340062b3001300c00189bad3020002802a03c8998020021812001a03c375c603c002604200280f8c8c8cc0040040108966002003003899192cc004c0380062b3001300d00189bab3021002802a03e8998020021812801a03e375c603e0026044002810052f5bded8c0290000c038dd50040c02cdd5001c590090c028004c014dd5005452689b2b2006260150d8799fd87a9f581c07a947309e200dc47e2edf47b8909a8c2d46a102c3f99cd09ce68e05ffd8799fd8799fd8799f581cef136e1653cc0e3d6ea466a56d657dc3ad37c44409865c80d30d03b9ffffffff004c01021864004c01051a0016e360004c0109d8799f1a004c4b40ff0001",
+      "hash": "558802cc2e2f21e4e13662cdf73f979ce0140e7dbd7ce13911a9063d"
+    },
+    {
+      "title": "listing.listing.else",
+      "redeemer": {
+        "schema": {}
+      },
+      "compiledCode": "5907b70101003333222229800aba2aba1aba0aab9faab9eaab9dab9a9bad0049bad00348888888896600264653001300a00198051805800cdc3a4005300a0024888966002600460146ea800e2653001300f00198079808000cdc3a400091119912cc004c00c00626464b300130170028024590141bad3015001301137540151598009804000c56600260226ea802a00516404916403c8078660024464b30013004001899192cc004c06000a0091640546eb8c058004c048dd5001c56600260120031323259800980c00140122c80a8dd7180b00098091baa0038b2020404060206ea800a460266028003222329800800c01200680088896600200510018cc00400e6032005330043018002001400c80b246026602860280033722911009b8f488100911919800800801912cc00400629422b30013371e6eb8c05800400e2946266004004602e002808901448c04cc050c050c050c050c050c050c050c050006444464b30013006301337540051325980099b880010028800c40090131bad3017301437540051001404864b30013371000600310018801a0243370666e0801000d20a09c0191809980a180a180a000c8896600266e2400520008801456600200514bd70466002007301600299b804800400500320264040911111111111919912cc004c03cc070dd500844c9660026020603a6ea805e2646644b3001301830203754005133225980099b884800000a2b30013371266453001002a4001225980099baf302a302737546054604e6ea8c05cc09cdd500119ba548008cc0a4dd4801a5eb82264b30013370e900218139baa001899192cc004c070c0a4dd500144c8c8c8c8ca60026064003375c606400b375a60640073758606400491112cc004c0dc01626602e606c010264660020020044464b30010028992cc004c0a400626464b3001303d00280845903a1bae303b001303737540111598009817000c566002606e6ea802201d1640e11640d481a8c0d4dd5003c4c9660026052606c6ea80062646464b3001303e00289980f181e80189802981f00345903b1bad303c001303c001303737540031640d4607200481b8c00800a2c81a0606400260620026060002605e00260546ea800a2c81404cdc0001cc004dd6980b98149baa001813409605e8090c0acc0a0dd5000c59026180a98139baa3017302737540051001409480a0dd6181318119baa019375c604c60466ea801260026eb0c044c08cdd500cd2000912cc004cdd7981418129baa00202e899b80001300b3756602a604a6ea800a20028119012456600330013026001980998119baa00699b8000230093756602660466ea801600680422b3001329800800cc0a000a6eb0c030c090dd5003a00222259800800c528c4c96600200714a115980099b8848000dd6980b98139baa0018acc00660026054007302a30273754003375a602e604e6ea800600e8062330010049815801cc0ac0090044528204a8a5040948140c0a400502744c966002603660466ea8006294626601e6eb0c038c090dd500d1bae3027302437540028110c098c09cc09cc09cc09cc08cdd5003452820428a50408514a0810a294102119b81337026eb4c03cc084dd50024c004dd6980798109baa00480f407604e805260026eb0c024c084dd5002520009119b80001375a602660466ea80090104c0040226eb0c03cc084dd500bcdd6981218109baa01a402116407c6044603e6ea8c088c07cdd50009b94376602664660020026eb0c088c07cdd500a912cc0040062d1325980099baf30243021375400202b13011302137540031330030033025002407c6046002810a2660126eb0c020c078dd500a1bae3021301e375400280e0c080c074dd500845901b11112cc004cdd79811180f9baa0040038acc004cdd7a60101a000374c64660020026eacc040c080dd5002912cc004006297adef6c6089919912cc004c04400a2b300130100028800c401102244cc09800ccc0140140050221bae302100130260023024001408915980099b8900230053756601e603e6ea8012266ebcc034c07cdd500219ba548010cc084dd4800a5eb82294101d4528203a8a50407444b3001300f301c3754005132323259800981200144cc044c08c00c4c9660026026003132598009813000c4c8c966002602c003132598009814800c4cc058c0a00040262c8130c090dd500145660026036003132323298009bad302a0019bad302a0039bad302a002488966002605c00900e8b20561815000981480098121baa0028b2044408860446ea8004c0940062c8118c084dd50014566002603000315980098109baa002802c5902245901f203e301f375400316408460440026044002603a6ea800a2c80d88c8cc88cc0080080048966002003003899192cc004c0340062b3001300c00189bad3020002802a03c8998020021812001a03c375c603c002604200280f8c8c8cc0040040108966002003003899192cc004c0380062b3001300d00189bab3021002802a03e8998020021812801a03e375c603e0026044002810052f5bded8c0290000c038dd50040c02cdd5001c590090c028004c014dd5005452689b2b2006260150d8799fd87a9f581c07a947309e200dc47e2edf47b8909a8c2d46a102c3f99cd09ce68e05ffd8799fd8799fd8799f581cef136e1653cc0e3d6ea466a56d657dc3ad37c44409865c80d30d03b9ffffffff004c01021864004c01051a0016e360004c0109d8799f1a004c4b40ff0001",
+      "hash": "558802cc2e2f21e4e13662cdf73f979ce0140e7dbd7ce13911a9063d"
+    }
+  ],
+  "definitions": {
+    "Int": {
+      "dataType": "integer"
+    },
+    "List<gero_market/types/Payee>": {
+      "dataType": "list",
+      "items": {
+        "$ref": "#/definitions/gero_market~1types~1Payee"
+      }
+    },
+    "Option<Int>": {
+      "title": "Option",
+      "anyOf": [
+        {
+          "title": "Some",
+          "description": "An optional value.",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        },
+        {
+          "title": "None",
+          "description": "Nothing.",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "Option<aiken/crypto/VerificationKeyHash>": {
+      "title": "Option",
+      "anyOf": [
+        {
+          "title": "Some",
+          "description": "An optional value.",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/aiken~1crypto~1VerificationKeyHash"
+            }
+          ]
+        },
+        {
+          "title": "None",
+          "description": "Nothing.",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "Option<cardano/address/StakeCredential>": {
+      "title": "Option",
+      "anyOf": [
+        {
+          "title": "Some",
+          "description": "An optional value.",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/cardano~1address~1StakeCredential"
+            }
+          ]
+        },
+        {
+          "title": "None",
+          "description": "Nothing.",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "aiken/crypto/ScriptHash": {
+      "title": "ScriptHash",
+      "dataType": "bytes"
+    },
+    "aiken/crypto/VerificationKeyHash": {
+      "title": "VerificationKeyHash",
+      "dataType": "bytes"
+    },
+    "cardano/address/Address": {
+      "title": "Address",
+      "description": "A Cardano `Address` typically holding one or two credential references.\n\n Note that legacy bootstrap addresses (a.k.a. 'Byron addresses') are\n completely excluded from Plutus contexts. Thus, from an on-chain\n perspective only exists addresses of type 00, 01, ..., 07 as detailed\n in [CIP-0019 :: Shelley Addresses](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0019/#shelley-addresses).",
+      "anyOf": [
+        {
+          "title": "Address",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "payment_credential",
+              "$ref": "#/definitions/cardano~1address~1PaymentCredential"
+            },
+            {
+              "title": "stake_credential",
+              "$ref": "#/definitions/Option<cardano~1address~1StakeCredential>"
+            }
+          ]
+        }
+      ]
+    },
+    "cardano/address/Credential": {
+      "title": "Credential",
+      "description": "A general structure for representing an on-chain `Credential`.\n\n Credentials are always one of two kinds: a direct public/private key\n pair, or a script (native or Plutus).",
+      "anyOf": [
+        {
+          "title": "VerificationKey",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/aiken~1crypto~1VerificationKeyHash"
+            }
+          ]
+        },
+        {
+          "title": "Script",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "$ref": "#/definitions/aiken~1crypto~1ScriptHash"
+            }
+          ]
+        }
+      ]
+    },
+    "cardano/address/PaymentCredential": {
+      "title": "PaymentCredential",
+      "description": "A general structure for representing an on-chain `Credential`.\n\n Credentials are always one of two kinds: a direct public/private key\n pair, or a script (native or Plutus).",
+      "anyOf": [
+        {
+          "title": "VerificationKey",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/aiken~1crypto~1VerificationKeyHash"
+            }
+          ]
+        },
+        {
+          "title": "Script",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "$ref": "#/definitions/aiken~1crypto~1ScriptHash"
+            }
+          ]
+        }
+      ]
+    },
+    "cardano/address/StakeCredential": {
+      "title": "StakeCredential",
+      "description": "Represent a type of object that can be represented either inline (by hash)\n or via a reference (i.e. a pointer to an on-chain location).\n\n This is mainly use for capturing pointers to a stake credential\n registration certificate in the case of so-called pointer addresses.",
+      "anyOf": [
+        {
+          "title": "Inline",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/cardano~1address~1Credential"
+            }
+          ]
+        },
+        {
+          "title": "Pointer",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "title": "slot_number",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "transaction_index",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "certificate_index",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        }
+      ]
+    },
+    "gero_market/types/Action": {
+      "title": "Action",
+      "anyOf": [
+        {
+          "title": "Purchase",
+          "description": "`first_output` is the index of this listing's seller output; its royalty\n outputs follow it in order. The fee is paid separately (combined fee output).",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "first_output",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        },
+        {
+          "title": "Cancel",
+          "description": "Owner removes the listing; also used to reprice (cancel and relist in one tx).",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "gero_market/types/Listing": {
+      "title": "Listing",
+      "anyOf": [
+        {
+          "title": "Listing",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "owner",
+              "description": "Seller's payment key hash. Must sign Cancel.",
+              "$ref": "#/definitions/aiken~1crypto~1VerificationKeyHash"
+            },
+            {
+              "title": "seller_address",
+              "description": "Where the seller's proceeds (and the deposit) go.",
+              "$ref": "#/definitions/cardano~1address~1Address"
+            },
+            {
+              "title": "price",
+              "description": "What the buyer pays to payees, in lovelace (fee + royalties + seller share).",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "royalties",
+              "description": "Creator royalties. May be empty.",
+              "$ref": "#/definitions/List<gero_market~1types~1Payee>"
+            },
+            {
+              "title": "buyer",
+              "description": "Private sale: only this key may buy. None = public listing.",
+              "$ref": "#/definitions/Option<aiken~1crypto~1VerificationKeyHash>"
+            }
+          ]
+        }
+      ]
+    },
+    "gero_market/types/Payee": {
+      "title": "Payee",
+      "anyOf": [
+        {
+          "title": "Payee",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "address",
+              "$ref": "#/definitions/cardano~1address~1Address"
+            },
+            {
+              "title": "lovelace",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
