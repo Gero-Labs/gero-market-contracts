@@ -54,6 +54,8 @@ test('the committed deployments all verify', () => {
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   assert.match(result.stdout, /verified preprod-v1: both implementations give script hash 558802cc2e2f21e4e13662cdf73f979ce0140e7dbd7ce13911a9063d/);
   assert.match(result.stdout, /1 deployment verified/);
+  // The record of the published preprod-v1 is checked too, and names the output the chain holds.
+  assert.match(result.stdout, /preprod-v1: deployment\.json matches the folder, reference script 3a67a8ea84fba06cd3ab80e0d03cc12406a2e3b60ae0dba59475a852f7ca4eea#0/);
 });
 
 test('a folder that is still being prepared (no script.json) is left out', () => {

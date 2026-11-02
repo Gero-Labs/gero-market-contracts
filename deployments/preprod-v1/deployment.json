@@ -1,0 +1,45 @@
+{
+  "network": "preprod",
+  "version": 1,
+  "scriptHash": "558802cc2e2f21e4e13662cdf73f979ce0140e7dbd7ce13911a9063d",
+  "referenceScript": "3a67a8ea84fba06cd3ab80e0d03cc12406a2e3b60ae0dba59475a852f7ca4eea#0",
+  "referenceScriptAddress": "addr_test1wpfdc02rkmfyvh5kzzwwwk4kr2l9a8qa3g7feehl3ga022qez7f2d",
+  "feeAddress": "addr_test1zqr6j3esncsqm3r79m050wysn2xz634pqtpln8xsnnngup00zdhpv57vpc7kafrx54kk2lwr45mug3qfsewgp5cdqwusxeyzuc",
+  "feeNativeScript": {
+    "type": "all",
+    "scripts": [
+      {
+        "type": "atLeast",
+        "required": 2,
+        "scripts": [
+          {
+            "type": "sig",
+            "keyHash": "2302f82ddb1cb59ea402d28022ff21d5746170297eb1e666c4dd68dc"
+          },
+          {
+            "type": "sig",
+            "keyHash": "5c6af32c872d67ed1e7b352c4d7ea1d9b229de78df9fd43e10476980"
+          },
+          {
+            "type": "sig",
+            "keyHash": "a3d6a813c828539551dd3313e5d9620b1c2a679fe65bbb896625217f"
+          }
+        ]
+      },
+      {
+        "type": "after",
+        "slot": 1
+      }
+    ]
+  },
+  "params": {
+    "feeBps": 100,
+    "minFeeLovelace": 1500000,
+    "maxFeeLovelace": 5000000
+  },
+  "plutusVersion": "V3",
+  "aikenVersion": "v1.1.24",
+  "stdlibVersion": "v4.0.0",
+  "sourceCommit": "2b36ccf3d1f82bd93422ddc939b9f788b3c7de86",
+  "uplcVerification": "Not on uplc.link. Checked by hand: the reference script read back from chain (Koios utxo_info, extended) equals compiledCode of script.json (1978 bytes) and blake2b-224 over 0x03 and those bytes is scriptHash; aiken v1.1.24 uplc decode of the on-chain bytes is the unapplied validator of plutus.json (listing.listing.spend) applied to exactly fee_address (script 07a947309e200dc47e2edf47b8909a8c2d46a102c3f99cd09ce68e05, stake key ef136e1653cc0e3d6ea466a56d657dc3ad37c44409865c80d30d03b9), 100, 1500000 and Some 5000000; apply-params (Aiken CLI) and verify-params (Lucid Evolution) give the same hash; eval-applied.mjs runs the script on 10 contexts, all as expected."
+}

@@ -46,20 +46,23 @@ fee address  ->  params.json  ->  apply-params  ->  verify-params  ->  publish-r
 
 `deployments/preprod-v1/` holds the preprod version 1 deployment, made with test keys that live
 outside this repository. Its parameters are applied (`apply-params.mjs`) and verified
-(`verify-params.mjs`, and on every CI run `verify-deployments.mjs` and `eval-applied.mjs`), but it
-is **not yet published on chain**: no reference-script transaction has been signed or sent, and the
-folder has no `deployment.json`.
+(`verify-params.mjs`, and on every CI run `verify-deployments.mjs` and `eval-applied.mjs`), and it is
+**published on preprod**: the reference-script transaction is on chain and the folder holds its
+`deployment.json`. The test deployer that paid for it had exactly 10 tADA, so the transaction has no
+change output and its fee (569,720 lovelace) includes the leftover (see step 4).
 
 | Item | Value |
 |---|---|
 | Script hash | `558802cc2e2f21e4e13662cdf73f979ce0140e7dbd7ce13911a9063d` |
+| Reference script | `3a67a8ea84fba06cd3ab80e0d03cc12406a2e3b60ae0dba59475a852f7ca4eea#0`, locked at `addr_test1wpfdc02rkmfyvh5kzzwwwk4kr2l9a8qa3g7feehl3ga022qez7f2d` (9,430,280 lovelace, no datum) |
 | Fee address | `addr_test1zqr6j3esncsqm3r79m050wysn2xz634pqtpln8xsnnngup00zdhpv57vpc7kafrx54kk2lwr45mug3qfsewgp5cdqwusxeyzuc` |
 | Fee native script hash | `07a947309e200dc47e2edf47b8909a8c2d46a102c3f99cd09ce68e05` |
 | Terms | 100 basis points, minimum 1,500,000 lovelace, cap 5,000,000 lovelace |
 
-Do every step below on preprod first. The rehearsal is finished when
-`deployments/preprod-v1/deployment.json` exists and two people have reviewed it. Never reuse the
-preprod keys on mainnet: they were generated on a development machine.
+Do every step below on preprod first. The rehearsal is finished when two people have reviewed
+`deployments/preprod-v1/deployment.json` against the chain, and the preprod listing, cancel, buy and
+fee sweep of step 0 have been done against the reference script. Never reuse the preprod keys on
+mainnet: they were generated on a development machine.
 
 ## The mainnet checklist
 
