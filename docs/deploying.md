@@ -258,7 +258,9 @@ mainnet publish therefore needs a reviewed change to that script first.
   | `uplcVerification` | the link to the UPLC verification of step 3, or a note of how the script was checked |
 
   The date and the transaction id of the publish go in the commit message that adds the file, not in
-  the file.
+  the file. `verify-deployments.mjs` (and so CI) checks every field that repeats the rest of the
+  folder, and the shape of `referenceScript`, `stdlibVersion`, `sourceCommit` and
+  `uplcVerification`; whether the chain agrees is the by-hand comparison below.
 - [ ] Two people compare every field of `deployment.json` with the chain and with the rest of the
   folder (hash, output reference and address, fee address and native script, parameters, versions,
   commit, verification) before it is committed.

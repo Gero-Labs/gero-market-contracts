@@ -18,6 +18,7 @@ differs from the one in the folder.
 | `params.json` | The four contract parameters that were applied. | by hand, reviewed |
 | `plutus.json` | The blueprint with all four parameters applied. | `scripts/apply-params.mjs` |
 | `script.json` | `{ scriptHash, compiledCode }`: the script hash and the compiled code of the deployed validator. | `scripts/apply-params.mjs` |
+| `deployment.json` | Added once, after the reference script is on chain: the record Gero Wallet and Nexus copy (script hash, reference script output, always-fail address, fee address and native script, terms, versions, source commit, how the script was checked). Its shape is in [docs/deploying.md](../docs/deploying.md#6-record-it). Not required: a folder that is not published yet has none. | by hand, after the on-chain check |
 
 `params.json` looks like this (version 1 terms; `maxFeeLovelace` is `null` for no cap):
 
@@ -100,7 +101,13 @@ other steps only need Node.
 
    It must exit 0. Exit 1 prints both hashes (or the `fee-address.json` mismatch): do not publish,
    find out which encoding or file is wrong. CI runs `verify-deployments.mjs`, which does this for
-   every folder here that holds a `script.json`.
+   every folder here that holds a `script.json`. For a folder that also holds a `deployment.json`
+   it checks that record too (exit 1 on a mismatch, exit 2 when it is not JSON): `network` and
+   `version` are the folder's name, `scriptHash` is `script.json`'s, `feeAddress`, `feeNativeScript`
+   and `params` are those of `params.json` and `fee-address.json`, `plutusVersion` is `V3` and
+   `aikenVersion` the compiler of `plutus.json`, `referenceScriptAddress` is the always-fail address
+   of the network, and `referenceScript`, `stdlibVersion`, `sourceCommit` and `uplcVerification`
+   have their shape. It does not look at the chain: that comparison is by hand.
 6. **Run the applied script.** Add the script contexts of this deployment (built with its script
    hash and fee address in `lib/gero_market/contexts.ak`, pinned in
    `lib/gero_market/contexts.test.ak`, saved as `test-vectors/contexts/<network>-v<N>/*.hex`; the

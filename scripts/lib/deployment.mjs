@@ -10,9 +10,9 @@
 import { lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseArgs } from 'node:util';
+import { isDeepStrictEqual, parseArgs } from 'node:util';
 
-import { getAddressDetails, scriptFromNative, validatorToScriptHash } from '@lucid-evolution/lucid';
+import { getAddressDetails, scriptFromNative, validatorToAddress, validatorToScriptHash } from '@lucid-evolution/lucid';
 
 export { isMain } from './is-main.mjs';
 
@@ -150,6 +150,7 @@ export function deploymentPaths(dir, network, version) {
     params: join(folder, 'params.json'),
     plutus: join(folder, 'plutus.json'),
     script: join(folder, 'script.json'),
+    deployment: join(folder, 'deployment.json'),
   };
 }
 
@@ -405,6 +406,119 @@ export function feeAddressProblems(record, { version, feeAddress }) {
   }
   if (payment?.type !== 'Script' || payment.hash !== scriptHash) {
     problems.push(`fee-address.json address ${address} does not pay to its scriptHash (payment credential is ${payment?.type} ${payment?.hash})`);
+  }
+  return problems;
+}
+
+// ---------------------------------------------------------------------------------------------
+// deployment.json
+
+const DEPLOYMENT_KEYS = [
+  'network',
+  'version',
+  'scriptHash',
+  'referenceScript',
+  'referenceScriptAddress',
+  'feeAddress',
+  'feeNativeScript',
+  'params',
+  'plutusVersion',
+  'aikenVersion',
+  'stdlibVersion',
+  'sourceCommit',
+  'uplcVerification',
+];
+const DEPLOYMENT_PARAM_KEYS = ['feeBps', 'minFeeLovelace', 'maxFeeLovelace'];
+const REFERENCE_SCRIPT = /^([0-9a-f]{64})#(0|[1-9][0-9]*)$/;
+const TOOL_VERSION = /^v[0-9]+\.[0-9]+\.[0-9]+$/;
+const GIT_COMMIT = /^[0-9a-f]{40}$/;
+
+/** A transaction output index is a 16-bit number on Cardano. */
+const MAX_OUTPUT_INDEX = 65535;
+
+/** The address no transaction can spend from: the enterprise address of the native script `any []`. */
+function alwaysFailAddressOn(network) {
+  return validatorToAddress(NETWORKS[network].lucid, scriptFromNative({ type: 'any', scripts: [] }));
+}
+
+/**
+ * Checks the deployment.json of a folder against the folder and returns the problems found (an
+ * empty list when it is sound). It never throws on a bad record.
+ *
+ * The record is written by hand after the reference script is on chain (docs/deploying.md, step
+ * 6). Every field that repeats something the folder already says must say the same:
+ *
+ *   network, version      the folder's name
+ *   scriptHash            script.json
+ *   feeAddress            params.json and fee-address.json
+ *   feeNativeScript       fee-address.json
+ *   params                params.json (the three numbers)
+ *   plutusVersion         V3, as the blueprint's plutusVersion
+ *   aikenVersion          the compiler of the folder's plutus.json
+ *   referenceScriptAddress  the always-fail address of the network
+ *
+ * and the fields that only the chain or the operator know must have their shape:
+ * `referenceScript` is `<64 hex>#<index>`, `stdlibVersion` is `v<n>.<n>.<n>`, `sourceCommit` is a
+ * 40-character commit id and `uplcVerification` is some text. Whether the output at
+ * `referenceScript` really holds the script is a check against the chain, which this is not.
+ *
+ * `folder` is `{ network, version, script, params, feeAddress, plutus }`: the network and version
+ * of the folder's name and its script.json, params.json, fee-address.json and plutus.json as parsed.
+ */
+export function deploymentRecordProblems(record, { network, version, script, params, feeAddress, plutus }) {
+  // OX Agent: Prototype Pollution prevented by accepting only the thirteen known own keys and reading them with Object.hasOwn
+  if (!hasExactKeys(record, DEPLOYMENT_KEYS)) {
+    return [`deployment.json must be an object with exactly the keys ${DEPLOYMENT_KEYS.join(', ')}`];
+  }
+  const problems = [];
+  const show = (value) => JSON.stringify(value) ?? String(value);
+  const mismatch = (field, value, expected) => problems.push(`deployment.json ${field} ${show(value)} is not ${expected}`);
+
+  if (record.network !== network) mismatch('network', record.network, `the folder's network ${show(network)}`);
+  if (record.version !== version) mismatch('version', record.version, `the folder's version ${version}`);
+
+  if (record.scriptHash !== script.scriptHash) mismatch('scriptHash', record.scriptHash, `script.json's scriptHash ${script.scriptHash}`);
+
+  const reference = typeof record.referenceScript === 'string' ? REFERENCE_SCRIPT.exec(record.referenceScript) : null;
+  if (reference === null || Number(reference[2]) > MAX_OUTPUT_INDEX) {
+    mismatch('referenceScript', record.referenceScript, `"<64 hex characters>#<output index, 0 to ${MAX_OUTPUT_INDEX}>"`);
+  }
+  const alwaysFail = alwaysFailAddressOn(network);
+  if (record.referenceScriptAddress !== alwaysFail) {
+    mismatch('referenceScriptAddress', record.referenceScriptAddress, `the always-fail address of ${network} (${alwaysFail})`);
+  }
+
+  if (record.feeAddress !== params.feeAddress) mismatch('feeAddress', record.feeAddress, `params.json's feeAddress ${show(params.feeAddress)}`);
+  if (record.feeAddress !== feeAddress.address) mismatch('feeAddress', record.feeAddress, `fee-address.json's address ${show(feeAddress.address)}`);
+  if (!isDeepStrictEqual(record.feeNativeScript, feeAddress.nativeScript)) {
+    problems.push("deployment.json feeNativeScript is not the nativeScript of fee-address.json");
+  }
+
+  if (!hasExactKeys(record.params, DEPLOYMENT_PARAM_KEYS)) {
+    problems.push(`deployment.json params must be an object with exactly the keys ${DEPLOYMENT_PARAM_KEYS.join(', ')}`);
+  } else {
+    for (const key of DEPLOYMENT_PARAM_KEYS) {
+      if (record.params[key] !== params[key]) mismatch(`params.${key}`, record.params[key], `params.json's ${key} ${show(params[key])}`);
+    }
+  }
+
+  const blueprintPlutus = plutus?.preamble?.plutusVersion;
+  if (record.plutusVersion !== 'V3') mismatch('plutusVersion', record.plutusVersion, '"V3"');
+  else if (typeof blueprintPlutus !== 'string' || blueprintPlutus.toUpperCase() !== record.plutusVersion) {
+    mismatch('plutusVersion', record.plutusVersion, `the plutusVersion of plutus.json (${show(blueprintPlutus)})`);
+  }
+  const compiler = plutus?.preamble?.compiler?.version;
+  if (typeof compiler !== 'string' || compiler.split('+')[0] !== record.aikenVersion) {
+    mismatch('aikenVersion', record.aikenVersion, `the compiler of plutus.json (${show(compiler)}, without its build hash)`);
+  }
+  if (typeof record.stdlibVersion !== 'string' || !TOOL_VERSION.test(record.stdlibVersion)) {
+    mismatch('stdlibVersion', record.stdlibVersion, 'a version such as "v4.0.0"');
+  }
+  if (typeof record.sourceCommit !== 'string' || !GIT_COMMIT.test(record.sourceCommit)) {
+    mismatch('sourceCommit', record.sourceCommit, 'a full git commit id (40 lowercase hex characters)');
+  }
+  if (typeof record.uplcVerification !== 'string' || record.uplcVerification.trim() === '') {
+    mismatch('uplcVerification', record.uplcVerification, 'a link or a note of how the script was checked');
   }
   return problems;
 }

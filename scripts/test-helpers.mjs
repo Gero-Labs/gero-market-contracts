@@ -301,3 +301,44 @@ export function writeFeeAddress(dir, network, version, record = feeAddressFor(ne
   writeFileSync(join(folder, 'fee-address.json'), `${JSON.stringify(record, null, 2)}\n`);
   return record;
 }
+
+// ---------------------------------------------------------------------------------------------
+// A deployment.json for a folder
+
+/**
+ * The always-fail address of a network, from hand-built CBOR: the native script `any []` is
+ * [2, []] = 82 02 80, hashed with the tag byte 0x00, as an enterprise script address (type 7).
+ */
+export function alwaysFailAddressFor(network) {
+  const networkId = network === 'mainnet' ? 1 : 0;
+  const hash = blake2b(Uint8Array.from([0x00, 0x82, 0x02, 0x80]), { dkLen: 28 });
+  return bech32Encode(networkId === 1 ? 'addr' : 'addr_test', Uint8Array.from([(7 << 4) | networkId, ...hash]));
+}
+
+/**
+ * The deployment.json an operator would write for a folder, taken field by field from the folder's
+ * files (`script`, `params`, `feeAddress` are script.json, params.json and fee-address.json as
+ * parsed, `plutus` is plutus.json) and a reference script output. The Aiken and standard library
+ * versions are the ones the preprod-v1 build used.
+ */
+export function deploymentRecordFor({ network, version, script, params, feeAddress }, referenceScript = `${'ab'.repeat(32)}#0`) {
+  return {
+    network,
+    version,
+    scriptHash: script.scriptHash,
+    referenceScript,
+    referenceScriptAddress: alwaysFailAddressFor(network),
+    feeAddress: params.feeAddress,
+    feeNativeScript: structuredClone(feeAddress.nativeScript),
+    params: {
+      feeBps: params.feeBps,
+      minFeeLovelace: params.minFeeLovelace,
+      maxFeeLovelace: params.maxFeeLovelace,
+    },
+    plutusVersion: 'V3',
+    aikenVersion: 'v1.1.24',
+    stdlibVersion: 'v4.0.0',
+    sourceCommit: 'a'.repeat(40),
+    uplcVerification: 'decoded the on-chain script and compared it with plutus.json',
+  };
+}
