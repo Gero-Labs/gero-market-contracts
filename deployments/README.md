@@ -121,10 +121,17 @@ other steps only need Node.
    ```
 
    The transaction CBOR (hex) goes to stdout. A summary goes to stderr: the always-fail address,
-   the script hash, the lovelace of the reference script output and the fee. The output sits at the
-   enterprise address of the native script `{"type":"any","scripts":[]}`, which nothing can
-   satisfy, with no datum. The owner of `--from` signs and sends it elsewhere. Then record the script
-   hash, the reference script output and the source commit in the wallet's deployment list.
+   the script hash, the lovelace of the reference script output, the change and the fee. The output
+   sits at the enterprise address of the native script `{"type":"any","scripts":[]}`, which nothing
+   can satisfy, with no datum. The owner of `--from` signs and sends it elsewhere. Then record the
+   script hash, the reference script output and the source commit in the wallet's deployment list.
+
+   The rest of the funds go back to `--from` as change. If what is left is too little for a change
+   output of its own (an address funded with just enough, such as the 10 tADA of the preprod
+   deployer), there is no change output and that leftover is paid as fee; the summary says so. The
+   script refuses a transaction whose fee is above 1 ADA, so the leftover cannot be large. A
+   deployer that holds more than the output, the fee and the ledger minimum for one more output
+   always gets its change back.
 
 Steps 4 to 6 take `--dir <folder>` to work in another deployments folder than this one.
 

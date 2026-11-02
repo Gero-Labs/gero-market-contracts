@@ -40,10 +40,13 @@ const MAINNET_FROM = bech32Encode('addr', Uint8Array.from([0x61, ...hexToBytes(m
 const unapplied = JSON.parse(readFileSync(BLUEPRINT, 'utf8')).validators[0];
 const SCRIPT = { scriptHash: unapplied.hash, compiledCode: unapplied.compiledCode };
 
-/** A Lucid on an Emulator ledger in which `from` holds `lovelace` in a single UTxO. */
-async function emulatorLucid(lovelace = 1_000_000_000n, from = FROM) {
+/**
+ * A Lucid on an Emulator ledger in which `from` holds `lovelace` in a single UTxO. `parameters`
+ * replaces the protocol parameters (the Emulator's defaults when left out).
+ */
+async function emulatorLucid(lovelace = 1_000_000_000n, from = FROM, parameters = undefined) {
   const utxos = lovelace === 0n ? [] : [{ address: from, assets: { lovelace } }];
-  return Lucid(new Emulator(utxos), 'Preprod');
+  return Lucid(new Emulator(utxos, parameters), 'Preprod');
 }
 
 /** A deployments folder with `preprod-v<version>/script.json` holding `script`. */
@@ -119,6 +122,54 @@ test('the rest goes back to --from as change and the transaction balances', asyn
   assert.equal(body.mint(), undefined);
   assert.equal(body.collateral_inputs(), undefined);
   assert.equal(body.reference_inputs(), undefined);
+});
+
+test('funds that leave less than a change output over: no change output, the leftover is paid as fee', async () => {
+  // The deployer of preprod-v1 is funded with 10 tADA, which is this case: the locked output takes
+  // about 9.43 ADA, the fee about 0.25 ADA, and what is left cannot hold a change output.
+  const rich = await buildPublishTx({ lucid: await emulatorLucid(), compiledCode: SCRIPT.compiledCode, from: FROM });
+  const funds = rich.outputLovelace + rich.fee + 100_000n;
+  const lucid = await emulatorLucid(funds);
+  const { coinsPerUtxoByte, minFeeA, minFeeB } = lucid.config().protocolParameters;
+  const built = await buildPublishTx({ lucid, compiledCode: SCRIPT.compiledCode, from: FROM });
+
+  const body = transaction(built.txCbor).body();
+  const outputs = outputsOf(built.txCbor);
+  assert.equal(outputs.length, 1, 'only the locked output: nothing could be sent back as change');
+  const [locked] = outputs;
+  assert.equal(locked.address().to_bech32(), alwaysFailAddress());
+  assert.equal(locked.script_ref().hash().to_hex(), SCRIPT.scriptHash);
+  assert.equal(locked.datum(), undefined);
+  // The locked output is still the ledger minimum, not padded with the leftover.
+  assert.equal(locked.amount().coin(), BigInt(160 + locked.to_cbor_bytes().length) * coinsPerUtxoByte);
+  assert.equal(locked.amount().coin(), rich.outputLovelace);
+
+  // Inputs = output + fee, so the leftover is the fee. The fee covers the ledger's minimum for the
+  // transaction with its one signature (an `a0` witness set grows by 103 bytes for one key witness).
+  assert.equal(body.inputs().len(), 1);
+  assert.equal(locked.amount().coin() + body.fee(), funds, 'inputs = output + fee');
+  const minimumFee = BigInt(minFeeA) * BigInt(Buffer.from(built.txCbor, 'hex').length + 103) + BigInt(minFeeB);
+  assert.ok(body.fee() >= minimumFee, `fee ${body.fee()} is below the minimum ${minimumFee}`);
+  assert.ok(body.fee() <= 1_000_000n, 'the fee stays within 1 ADA');
+  assert.equal(built.fee, body.fee());
+  assert.equal(built.changeLovelace, 0n);
+  assert.match(formatSummary(built), /no change output/i, 'the summary says the leftover is paid as fee');
+});
+
+test('with room for a change output the leftover is still returned as change, and the summary says nothing about burning', async () => {
+  const built = await buildPublishTx({ lucid: await emulatorLucid(), compiledCode: SCRIPT.compiledCode, from: FROM });
+  const change = outputsOf(built.txCbor).find((o) => o.address().to_bech32() === FROM);
+  assert.equal(built.changeLovelace, change.amount().coin());
+  assert.doesNotMatch(formatSummary(built), /no change output/i);
+});
+
+test('a fee above 1 ADA is refused, so a leftover paid as fee cannot be large', async () => {
+  const { protocolParameters } = (await emulatorLucid()).config();
+  const costly = { ...protocolParameters, minFeeB: 1_200_000 };
+  await assert.rejects(
+    buildPublishTx({ lucid: await emulatorLucid(1_000_000_000n, FROM, costly), compiledCode: SCRIPT.compiledCode, from: FROM }),
+    (error) => !(error instanceof UsageError) && /fee/.test(error.message) && /1000000/.test(error.message),
+  );
 });
 
 test('the transaction is unsigned: an empty witness set, no scripts, valid flag, no auxiliary data', async () => {

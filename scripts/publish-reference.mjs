@@ -8,10 +8,15 @@
 // address, the enterprise address of the native script `{"type":"any","scripts":[]}`. That script
 // has no way to be satisfied, so the output can never be spent and the reference script stays
 // where wallets and dApps can find it. The output has no datum and holds the minimum ADA the
-// ledger requires for it; everything else comes back to `--from` as change.
+// ledger requires for it; everything else comes back to `--from` as change. When what is left
+// cannot hold a change output of its own (an address funded with just enough, such as the 10 tADA
+// of the preprod deployer), there is no change output and the leftover is paid as fee, which
+// Lucid Evolution's `includeLeftoverLovelaceAsFee` does. That lovelace would be lost either way (a
+// locked output at the always-fail address is as unspendable as a fee), the leftover is smaller
+// than the ledger's minimum for a change output, and the fee is capped at MAX_FEE_LOVELACE.
 //
 // Output: the unsigned transaction CBOR, as hex, on stdout and nothing else. A short summary
-// (always-fail address, script hash, output lovelace, fee) goes to stderr. Exit 0 on success; bad
+// (always-fail address, script hash, output lovelace, change, fee) goes to stderr. Exit 0 on success; bad
 // input, an address with no funds, or a provider that cannot be reached exits 2.
 //
 // This script is preprod only: `--network` must be `preprod`, and mainnet or any other network is
@@ -37,6 +42,13 @@ import {
 
 /** The public Koios endpoint for preprod; no API key. */
 export const KOIOS_PREPROD_URL = 'https://preprod.koios.rest/api/v1';
+
+/**
+ * The most the transaction may pay as fee. A publish costs about 0.25 ADA; with no change output
+ * the leftover (always below the ledger minimum for an output, under 1 ADA) is added to it, so
+ * anything above 1 ADA means the parameters or the wallet are not what the tool expects.
+ */
+export const MAX_FEE_LOVELACE = 1_000_000n;
 
 /** A native script no transaction can satisfy: `any` of nothing. Its CBOR is `82 02 80`. */
 export const ALWAYS_FAIL_SCRIPT = { type: 'any', scripts: [] };
@@ -73,7 +85,8 @@ const COMPILED_CODE = /^(?:[0-9a-f]{2})+$/;
 
 /**
  * Reads the built transaction back and checks it is exactly what was asked for; anything else is a
- * plain Error (nothing is printed). Returns what the summary reports.
+ * plain Error (nothing is printed). Returns what the summary reports: `changeLovelace` is what
+ * goes back to `--from` (0 when the leftover was too small for a change output and went to the fee).
  */
 function checkBuilt(txCbor, { from, scriptHash, coinsPerUtxoByte }) {
   const target = alwaysFailAddress();
@@ -89,6 +102,7 @@ function checkBuilt(txCbor, { from, scriptHash, coinsPerUtxoByte }) {
 
   const outputs = body.outputs();
   let locked;
+  let changeLovelace = 0n;
   for (let i = 0; i < outputs.len(); i += 1) {
     const output = outputs.get(i);
     const address = output.address().to_bech32();
@@ -97,8 +111,11 @@ function checkBuilt(txCbor, { from, scriptHash, coinsPerUtxoByte }) {
       locked = output;
     } else if (address !== from || output.script_ref() !== undefined || output.datum() !== undefined) {
       problems.push(`an output to ${address} that is not plain change to --from`);
+    } else {
+      changeLovelace += output.amount().coin();
     }
   }
+  if (body.fee() > MAX_FEE_LOVELACE) problems.push(`the fee is ${body.fee()} lovelace, more than ${MAX_FEE_LOVELACE}`);
   if (locked === undefined) {
     problems.push('no output at the always-fail address');
   } else {
@@ -113,13 +130,13 @@ function checkBuilt(txCbor, { from, scriptHash, coinsPerUtxoByte }) {
   }
   if (problems.length > 0) throw new Error(`the built transaction is not what was asked for: ${problems.join('; ')}`);
 
-  return { alwaysFailAddress: target, scriptHash, outputLovelace: locked.amount().coin(), fee: body.fee() };
+  return { alwaysFailAddress: target, scriptHash, outputLovelace: locked.amount().coin(), changeLovelace, fee: body.fee() };
 }
 
 /**
  * Builds the unsigned publish transaction against `lucid` (a Lucid Evolution instance on Preprod
  * with any provider). `compiledCode` is the script's hex as in script.json, `from` the address that
- * pays. Returns `{ txCbor, alwaysFailAddress, scriptHash, outputLovelace, fee }`.
+ * pays. Returns `{ txCbor, alwaysFailAddress, scriptHash, outputLovelace, changeLovelace, fee }`.
  */
 export async function buildPublishTx({ lucid, compiledCode, from }) {
   checkFrom(from);
@@ -135,7 +152,12 @@ export async function buildPublishTx({ lucid, compiledCode, from }) {
 
   let txCbor;
   try {
-    const built = await lucid.newTx().pay.ToAddressWithData(alwaysFailAddress(), undefined, {}, script).complete();
+    // `includeLeftoverLovelaceAsFee`: with too little left for a change output, pay it as fee
+    // instead of failing; checkBuilt caps the fee.
+    const built = await lucid
+      .newTx()
+      .pay.ToAddressWithData(alwaysFailAddress(), undefined, {}, script)
+      .complete({ includeLeftoverLovelaceAsFee: true });
     txCbor = built.toCBOR();
   } catch (error) {
     throw new UsageError(`cannot build the transaction (does ${from} hold enough ADA?): ${error?.message ?? error}`);
@@ -145,13 +167,18 @@ export async function buildPublishTx({ lucid, compiledCode, from }) {
 }
 
 /** The summary printed on stderr. */
-export function formatSummary({ alwaysFailAddress: address, scriptHash, outputLovelace, fee }) {
-  return [
+export function formatSummary({ alwaysFailAddress: address, scriptHash, outputLovelace, changeLovelace, fee }) {
+  const lines = [
     `always-fail address: ${address}`,
     `script hash:         ${scriptHash}`,
     `output lovelace:     ${outputLovelace}`,
+    `change lovelace:     ${changeLovelace}`,
     `fee (lovelace):      ${fee}`,
-  ].join('\n');
+  ];
+  if (changeLovelace === 0n) {
+    lines.push('note: no change output; the lovelace left over (too little for one) is part of the fee');
+  }
+  return lines.join('\n');
 }
 
 // ---------------------------------------------------------------------------------------------

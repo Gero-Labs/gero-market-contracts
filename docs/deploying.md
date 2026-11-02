@@ -197,9 +197,10 @@ mainnet publish therefore needs a reviewed change to that script first.
   `cardano-cli transaction view`). It has exactly one output at the always-fail address (the
   enterprise address of the native script `{"type":"any","scripts":[]}`, which nothing can satisfy),
   holding the PlutusV3 reference script whose hash is the `scriptHash` of `script.json`, with no datum
-  and no tokens. Everything else is change back to `--from`. There are no certificates, withdrawals,
-  minting, collateral or reference inputs. The lovelace in the reference output is locked for good: check the amount and
-  accept it.
+  and no tokens. Everything else is change back to `--from`; an address funded with just enough has
+  no change output, and its leftover (below the ledger minimum for an output) is paid as fee, which
+  the script caps at 1 ADA. There are no certificates, withdrawals, minting, collateral or reference
+  inputs. The lovelace in the reference output is locked for good: check the amount and accept it.
 - [ ] The transaction is signed from an A.D. Labs wallet, preferably a hardware wallet, and
   submitted. Neither happens in this repository. Record the transaction id.
 
