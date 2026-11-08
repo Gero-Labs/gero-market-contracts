@@ -64,6 +64,29 @@ Do every step below on preprod first. The rehearsal is finished when two people 
 fee sweep of step 0 have been done against the reference script. Never reuse the preprod keys on
 mainnet: they were generated on a development machine.
 
+### Preprod rehearsal record (2026-11-08)
+
+Done against the preprod version 1 reference script; every amount matched the expected outputs to
+the lovelace.
+
+| Step | Transaction | Notes |
+|---|---|---|
+| Listing created | [`a7ce170f…99f3`](https://preprod.cexplorer.io/tx/a7ce170ff5b1b5626c514ee318370c798793484395ac28e2752b34240d7b99f3) | Gero Wallet test build, NFT with no royalty, 20 tADA |
+| Repriced | [`dfcd8a92…ab42`](https://preprod.cexplorer.io/tx/dfcd8a92f053beea2b2bb33dad6e5d8dd0f1046c75076568af074477607cab42) | first execution of the script on chain (`Cancel` by the owner, new listing at 12 tADA) |
+| Cancelled | [`65f85fb5…f251`](https://preprod.cexplorer.io/tx/65f85fb5d3bc5e02e12193b0c77f01eaf117f4d34b0325576c5e706f2bfff251) | NFT and deposit back to the seller |
+| Bought, collateral lent by the pool | [`fcf4b6d6…893c`](https://preprod.cexplorer.io/tx/fcf4b6d65876626d5bcc109c21fe51508a52fd99ef65d40233d1955a48c9893c) | `Purchase`; seller paid price − fee + deposit, fee address paid 1.5 tADA |
+| Bought with one royalty, own collateral | [`6c4506e9…3663`](https://preprod.cexplorer.io/tx/6c4506e912fda4846af360c2015eb42818b7424b4deca806f97edfc1d75c3663) | 5% CIP-27 royalty of 2 tADA paid to the royalty address |
+| Bought by a wallet holding nothing of the collection | [`a03b923c…0dd3`](https://preprod.cexplorer.io/tx/a03b923ce9bba1bfb503dfbb403824b06b6a99d628d2f145adf366ef67c70dd3) | royalty 1.25 tADA, fee 1.5 tADA |
+| Fee sweep | [`f8d05e08…242f`](https://preprod.cexplorer.io/tx/f8d05e089d14b00ecdf0a9dc3bd1a2183ccb9a8a72289e230d8062da3bda242f) | all four fee UTxOs (6 tADA) to the test deployer, signed by two of the three fee signers, validity lower bound set |
+
+Bulk buy, evaluated by a preprod node through Ogmios (`evaluateTransaction`, synthetic listings,
+nothing signed): 10 listings with one royalty each use 76.0% of mainnet's memory limit and 49.9% of
+CPU, and 7 listings with three royalties each use 63.9%, matching the memory figures in
+[budget.md](budget.md) to the unit.
+
+Not yet done: a private buy (no client builds private listings yet), and the review of
+`deployments/preprod-v1/deployment.json` against the chain by two people.
+
 ## The mainnet checklist
 
 ### 0. Before anything
